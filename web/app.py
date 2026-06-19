@@ -401,6 +401,8 @@ def _run_import_task(
             created.append(_serialize_card(db.get_card(conn, card_id)))
 
         _update_task(task_id, status="done", progress=100, message="入库完成", cards=created)
+    except Exception as e:  # noqa: BLE001 兜底：后台任务绝不应静默卡死
+        _update_task(task_id, status="failed", error=f"录入任务异常: {e}", message="录入任务异常")
     finally:
         conn.close()
 
