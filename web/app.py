@@ -12,8 +12,11 @@
 import os
 import sys
 import json
+import uuid
+import sqlite3
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))  # 便于 `from core import ...`
@@ -59,9 +62,14 @@ app = FastAPI(title="AI 装修监理助手", version="2.0.0", lifespan=lifespan)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
-def get_db():
+def get_db_path() -> str:
+    """知识库 sqlite 路径（依赖注入，便于测试指向临时库）。"""
+    return DB_PATH
+
+
+def get_db(db_path: str = Depends(get_db_path)):
     """每个请求一个连接（依赖注入，便于测试覆盖）。"""
-    conn = db.connect(DB_PATH)
+    conn = db.connect(db_path)
     try:
         yield conn
     finally:
@@ -71,6 +79,11 @@ def get_db():
 def get_llm_client() -> LLMClient:
     """从环境变量构造 LLM 客户端（依赖注入，便于测试覆盖）。"""
     return LLMClient.from_env()
+
+
+def get_extractor() -> Callable:
+    """返回抖音解析/转写函数（依赖注入，便于测试 mock，避免真实下载/转写）。"""
+    return extract_text
 
 
 def _serialize_card(row: dict) -> dict:
@@ -249,6 +262,186 @@ async def create_cards_from_text(
         created.append(_serialize_card(db.get_card(conn, card_id)))
 
     return {"success": True, "cards": created}
+
+
+# ---------------------------------------------------------------------------
+# 抖音链接一键入库（异步任务 + 进度查询 + video_id 去重）
+# ---------------------------------------------------------------------------
+
+# 进度阶段：machine status -> 中文展示标签
+_TASK_PHASES = {
+    "pending": "排队中",
+    "extracting": "解析转写中",
+    "structuring": "结构化中",
+    "done": "已完成",
+    "duplicate": "已存在",
+    "failed": "失败",
+}
+
+# 录入任务注册表（自用单机场景，内存态即可）
+_tasks: dict[str, dict] = {}
+_tasks_lock = threading.Lock()
+
+
+def _new_task(url: str) -> str:
+    task_id = uuid.uuid4().hex
+    with _tasks_lock:
+        _tasks[task_id] = {
+            "task_id": task_id,
+            "status": "pending",
+            "phase": _TASK_PHASES["pending"],
+            "progress": 0,
+            "url": url,
+            "video_id": None,
+            "title": None,
+            "message": "已加入队列",
+            "error": None,
+            "duplicate": False,
+            "cards": [],
+        }
+    return task_id
+
+
+def _update_task(task_id: str, *, status: Optional[str] = None, **fields) -> None:
+    with _tasks_lock:
+        task = _tasks.get(task_id)
+        if task is None:
+            return
+        if status is not None:
+            task["status"] = status
+            task["phase"] = _TASK_PHASES.get(status, status)
+        task.update(fields)
+
+
+def _get_task(task_id: str) -> Optional[dict]:
+    with _tasks_lock:
+        task = _tasks.get(task_id)
+        return dict(task) if task else None
+
+
+def _run_import_task(
+    task_id: str,
+    url: str,
+    stage: Optional[str],
+    api_key: str,
+    extractor: Callable,
+    db_path: str,
+    llm,
+) -> None:
+    """后台线程：解析/转写 -> 去重 -> 结构化 -> 入库，并实时更新任务进度。"""
+    conn = db.connect(db_path)
+    try:
+        # 1) 解析 + 下载 + 转写（extract_text 是一体的黑盒步骤）
+        _update_task(task_id, status="extracting", progress=20, message="正在解析并转写视频")
+        try:
+            result = extractor(url, api_key=api_key, show_progress=False)
+        except Exception as e:  # 网络/解析/转写失败统一兜底
+            _update_task(task_id, status="failed", error=f"解析或转写失败: {e}", message="解析或转写失败")
+            return
+
+        video_info = result.get("video_info") or {}
+        video_id = video_info.get("video_id")
+        title = video_info.get("title")
+        text = (result.get("text") or "").strip()
+        _update_task(task_id, video_id=video_id, title=title, progress=50)
+
+        if not text:
+            _update_task(task_id, status="failed", error="转写结果为空，未识别到文案", message="未能识别到文案")
+            return
+
+        # 2) 去重：同一视频不重复入库
+        if video_id:
+            existing = db.get_card_by_video_id(conn, video_id)
+            if existing:
+                _update_task(
+                    task_id,
+                    status="duplicate",
+                    progress=100,
+                    duplicate=True,
+                    message="该视频已入库，未重复创建",
+                    cards=[_serialize_card(existing)],
+                )
+                return
+
+        # 3) AI 结构化
+        _update_task(task_id, status="structuring", progress=70, message="正在 AI 结构化")
+        try:
+            cards = structure.structure_text(text, llm)
+        except (StructureError, LLMError) as e:
+            _update_task(task_id, status="failed", error=f"AI 结构化失败: {e}", message="AI 结构化失败")
+            return
+
+        # 4) 入库（video_id 唯一，多卡时只第一张携带 video_id）
+        created = []
+        for i, card in enumerate(cards):
+            card_stage = stage or card["stage"]
+            try:
+                card_id = db.insert_card(
+                    conn,
+                    stage=card_stage,
+                    title=card["title"],
+                    raw_text=card["raw_text"],
+                    structured_json=card["structured_json"],
+                    source_type="douyin_link",
+                    source_url=url,
+                    video_id=video_id if i == 0 else None,
+                )
+            except sqlite3.IntegrityError:
+                # 并发下被其他任务抢先写入同一 video_id
+                existing = db.get_card_by_video_id(conn, video_id) if video_id else None
+                _update_task(
+                    task_id,
+                    status="duplicate",
+                    progress=100,
+                    duplicate=True,
+                    message="该视频已入库，未重复创建",
+                    cards=[_serialize_card(existing)] if existing else [],
+                )
+                return
+            created.append(_serialize_card(db.get_card(conn, card_id)))
+
+        _update_task(task_id, status="done", progress=100, message="入库完成", cards=created)
+    finally:
+        conn.close()
+
+
+class CardFromLinkRequest(BaseModel):
+    """抖音链接录入请求。"""
+    url: str
+    stage: Optional[str] = None
+    api_key: str = ""  # 可选，未传则用环境变量 API_KEY
+
+
+@app.post("/api/cards/from-link")
+async def create_cards_from_link(
+    req: CardFromLinkRequest,
+    llm=Depends(get_llm_client),
+    db_path: str = Depends(get_db_path),
+    extractor: Callable = Depends(get_extractor),
+):
+    """抖音分享链接 -> 转写 -> 结构化 -> 入库（异步，返回 task_id 供轮询进度）。"""
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="链接不能为空")
+
+    api_key = req.api_key or os.getenv("API_KEY", "")
+    task_id = _new_task(url)
+    worker = threading.Thread(
+        target=_run_import_task,
+        args=(task_id, url, req.stage, api_key, extractor, db_path, llm),
+        daemon=True,
+    )
+    worker.start()
+    return {"success": True, "task_id": task_id, "task": _get_task(task_id)}
+
+
+@app.get("/api/cards/task/{task_id}")
+async def get_import_task(task_id: str):
+    """查询链接录入任务的进度/结果。"""
+    task = _get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"success": True, "task": task}
 
 
 @app.get("/api/cards")
