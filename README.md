@@ -1,16 +1,63 @@
-# 短视频文案提取器
+# AI 装修监理助手
 
-[![PyPI version](https://badge.fury.io/py/douyin-mcp-server.svg)](https://badge.fury.io/py/douyin-mcp-server)
 [![Python version](https://img.shields.io/pypi/pyversions/douyin-mcp-server.svg)](https://pypi.org/project/douyin-mcp-server/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-从短视频分享链接下载无水印视频，AI 自动提取语音文案。
+把短视频里认可的装修知识，沉淀为**结构化卡片**；与装修公司沟通时，基于这些卡片回答问题，
+**严格防止模型幻觉**。本项目构建在「短视频文案提取」能力之上：粘贴一个分享链接即可自动得到文案、
+再由 AI 结构化入库——无需手动誊抄。
 
-![WebUI 界面预览](douyin-video.png)
+> 自用、单机、可自托管的 Web 应用（移动优先 + PWA）；长远目标是推广为微信小程序。
+
+## 📚 文档导航
+
+| 文档 | 内容 |
+|---|---|
+| [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：架构 / 数据模型 / 接口契约 / 防幻觉策略 / 关键决策 |
+| [`PROGRESS.md`](PROGRESS.md) | 开发进度、任务分解与验收标准、新 agent 上手指南 |
+| [`AGENTS.md`](AGENTS.md) | 云端 agent 环境说明（uv / 测试 / 运行方式）|
+
+## 🚦 当前进度
+
+- ✅ 任务 1~3：知识库存储（SQLite + FTS5 中文检索）、LLM 封装（OpenAI 兼容、可替换供应商）、
+  文本录入与结构化 API（`POST /api/cards/from-text`、`GET /api/cards[/{id}]`）。
+- ⬜ 任务 4~8：抖音链接一键入库、卡片编辑/删除、检索 + 问答、防幻觉、前端三 Tab + PWA。
+
+详见 [`PROGRESS.md`](PROGRESS.md)。
+
+## ⚡ 快速开始（装修助手）
+
+```bash
+# 1. 安装依赖（项目用 uv 管理）
+uv sync
+
+# 2. 配置 LLM / 语音识别密钥（二者可共用一个硅基流动 Key）
+export API_KEY="sk-xxx"          # 语音识别（ASR），也作 LLM_API_KEY 的回退
+# 可选：替换 LLM 供应商 / 模型
+# export LLM_BASE_URL="https://api.siliconflow.cn/v1"
+# export LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+
+# 3. 启动 WebUI
+uv run python web/app.py        # 访问 http://localhost:8080
+
+# 4. 运行测试（TDD，应全绿）
+uv run python -m pytest
+```
+
+主要环境变量见 [`docs/DESIGN.md` 第 9 节](docs/DESIGN.md)。
+
+---
+
+## 🎬 底层能力：短视频文案提取
 
 <a href="https://glama.ai/mcp/servers/@yzfly/douyin-mcp-server">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@yzfly/douyin-mcp-server/badge" alt="douyin-mcp-server MCP server" />
 </a>
+
+从短视频分享链接下载无水印视频，AI 自动提取语音文案。以下为该能力的独立使用方式
+（WebUI / MCP / 命令行）。
+
+![WebUI 界面预览](douyin-video.png)
 
 ## ✨ 功能特性
 
