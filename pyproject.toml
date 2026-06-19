@@ -39,3 +39,9 @@ Issues = "https://github.com/yzfly/douyin-mcp-server/issues"
 
 [project.scripts]
 douyin-mcp-server = "douyin_mcp_server.server:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]
