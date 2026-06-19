@@ -50,3 +50,9 @@ temp/
 # Local
 .env
 output/
+
+# 知识库数据（SQLite）
+data/
+*.db
+*.sqlite
+*.sqlite3

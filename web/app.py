@@ -11,12 +11,17 @@
 
 import os
 import sys
+import json
 from pathlib import Path
+from typing import Optional
 
 # 添加项目路径
+sys.path.insert(0, str(Path(__file__).parent))  # 便于 `from core import ...`
 sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video" / "scripts"))
 
-from fastapi import FastAPI, Request, HTTPException
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -26,8 +31,59 @@ import requests
 # 导入抖音处理模块
 from douyin_downloader import get_video_info, extract_text, HEADERS
 
-app = FastAPI(title="抖音文案提取器", version="1.0.0")
+# 核心模块：知识库存储、LLM、结构化
+from core import db, structure
+from core.llm import LLMClient, LLMError
+from core.structure import StructureError
+
+# 知识库数据库路径（可用环境变量覆盖）
+DB_PATH = os.getenv(
+    "KNOWLEDGE_DB",
+    str(Path(__file__).parent.parent / "data" / "knowledge.db"),
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时确保数据库目录存在并初始化表结构。"""
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    conn = db.connect(DB_PATH)
+    try:
+        db.init_db(conn)
+    finally:
+        conn.close()
+    yield
+
+
+app = FastAPI(title="AI 装修监理助手", version="2.0.0", lifespan=lifespan)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+def get_db():
+    """每个请求一个连接（依赖注入，便于测试覆盖）。"""
+    conn = db.connect(DB_PATH)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def get_llm_client() -> LLMClient:
+    """从环境变量构造 LLM 客户端（依赖注入，便于测试覆盖）。"""
+    return LLMClient.from_env()
+
+
+def _serialize_card(row: dict) -> dict:
+    """把数据库行转为 API 卡片：附带解析后的 steps。"""
+    card = dict(row)
+    steps = []
+    if card.get("structured_json"):
+        try:
+            steps = json.loads(card["structured_json"]).get("steps", [])
+        except (json.JSONDecodeError, AttributeError):
+            steps = []
+    card["steps"] = steps
+    return card
 
 
 class VideoRequest(BaseModel):
@@ -153,6 +209,62 @@ async def download_video(url: str, filename: str = "video.mp4"):
         raise HTTPException(status_code=e.response.status_code, detail=f"下载失败: {e.response.status_code}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class CardFromTextRequest(BaseModel):
+    """文本录入请求。"""
+    text: str
+    stage: Optional[str] = None
+
+
+@app.post("/api/cards/from-text")
+async def create_cards_from_text(
+    req: CardFromTextRequest,
+    conn=Depends(get_db),
+    llm=Depends(get_llm_client),
+):
+    """粘贴文案 -> AI 结构化 -> 入库（可生成多张卡片）。"""
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="文案内容不能为空")
+
+    try:
+        cards = structure.structure_text(text, llm)
+    except StructureError as e:
+        raise HTTPException(status_code=502, detail=f"AI 结构化失败: {e}")
+    except LLMError as e:
+        raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
+
+    created = []
+    for card in cards:
+        stage = req.stage or card["stage"]
+        card_id = db.insert_card(
+            conn,
+            stage=stage,
+            title=card["title"],
+            raw_text=card["raw_text"],
+            structured_json=card["structured_json"],
+            source_type="manual",
+        )
+        created.append(_serialize_card(db.get_card(conn, card_id)))
+
+    return {"success": True, "cards": created}
+
+
+@app.get("/api/cards")
+async def list_cards(stage: Optional[str] = None, conn=Depends(get_db)):
+    """列出知识卡片，可按阶段筛选。"""
+    rows = db.list_cards(conn, stage=stage)
+    return {"success": True, "cards": [_serialize_card(r) for r in rows]}
+
+
+@app.get("/api/cards/{card_id}")
+async def get_card_detail(card_id: int, conn=Depends(get_db)):
+    """获取单张卡片详情。"""
+    row = db.get_card(conn, card_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="卡片不存在")
+    return {"success": True, "card": _serialize_card(row)}
 
 
 def main():
