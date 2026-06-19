@@ -22,8 +22,12 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 env/
 ENV/
+
+# 测试期转写缓存
+.cache/
 
 # IDE
 .vscode/

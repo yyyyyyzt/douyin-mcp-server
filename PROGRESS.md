@@ -3,7 +3,7 @@
 > 配套阅读：[`docs/DESIGN.md`](docs/DESIGN.md)（总体设计 / 架构 / 接口契约 / 防幻觉策略）。
 > 本文件追踪"做到哪了、下一步做什么、验收标准是什么"，是新 agent 接手的入口。
 
-最后更新：完成任务 1~3（最小闭环：文本录入 + 结构化 + 存库），并纳入云端环境配置。
+最后更新：完成任务 1~4（最小闭环 + 抖音链接一键入库：异步任务 + 进度查询 + video_id 去重），并纳入云端环境配置。
 
 ---
 
@@ -14,7 +14,7 @@
 | 1 | SQLite + FTS5 数据层 | ✅ 已完成 |
 | 2 | LLM 封装（OpenAI 兼容、可替换、重试）| ✅ 已完成 |
 | 3 | 文本录入：文案 → 结构化 → 存库 + API | ✅ 已完成 |
-| 4 | 抖音链接一键入库（异步 + 进度 + 去重）| ⬜ 待开发 |
+| 4 | 抖音链接一键入库（异步 + 进度 + 去重）| ✅ 已完成 |
 | 5 | 卡片编辑 / 删除 API | ⬜ 待开发 |
 | 6 | 检索层 + 问答 API | ⬜ 待开发 |
 | 7 | 防幻觉（阈值 + 引用 + 警告）| ⬜ 待开发 |
@@ -46,18 +46,25 @@
   API `POST /api/cards/from-text`、`GET /api/cards`、`GET /api/cards/{id}`。
 - 要点：FastAPI 依赖注入 `get_db / get_llm_client`，测试可覆盖。
 
+### 任务 4 · 抖音链接一键入库 ✅
+- 文件：`web/app.py`（测试 `tests/test_api_from_link.py`）
+- 能力：
+  - `POST /api/cards/from-link`：接收抖音分享链接（兼容整段分享文案），后台线程异步执行
+    「解析/下载/转写 → 去重 → AI 结构化 → 入库」，立即返回 `task_id`。
+  - `GET /api/cards/task/{task_id}`：查询进度，`status` 状态机
+    `pending/extracting/structuring/done/duplicate/failed`，附中文 `phase` 与 `progress`。
+  - 去重：转写得到 `video_id` 后用 `db.get_card_by_video_id` 判断，已存在则返回 `duplicate`
+    并回带已有卡片，不重复插入；并发下 `IntegrityError` 兜底同样转为 `duplicate`。
+  - 入库记录 `source_type='douyin_link'`、`source_url`、`video_id`；一段文案拆多卡时，
+    受 `video_id UNIQUE` 约束仅第一张携带 `video_id`，其余为 `None`。
+- 要点：新增依赖注入 `get_db_path / get_extractor`（`get_db` 改为基于 `get_db_path`），
+  测试可 mock `extract_text` 与 LLM、指向临时库，全程不触网。后台任务有顶层异常兜底，
+  绝不静默卡死。
+- 自测工具：`scripts/check_api_keys.py` 验证 LLM / ASR 平台 Key 连通性（`--only llm|asr`）。
+
 ---
 
 ## 下一步（待开发任务的验收标准）
-
-### 任务 4 · 抖音链接一键入库 ⬜
-- **目标**：`POST /api/cards/from-link` 接收抖音分享链接 → 调 `douyin_downloader.extract_text`
-  得到文案 → `structure_text` 结构化 → 存库（记录 `source_type='douyin_link'`、`source_url`、`video_id`）。
-- **异步**：录入耗时长（20~60s），需返回 `task_id`，并提供 `GET /api/cards/task/{task_id}`
-  查询进度（解析中 / 转写中 / 结构化中 / 完成 / 失败）。
-- **去重**：入库前用 `db.get_card_by_video_id` 判断，已存在则提示而非重复插入。
-- **验收**：链接 → 自动生成卡片；重复链接被拦截；任务进度可查询；ASR/LLM 失败有清晰错误。
-- **测试**：mock `extract_text` 与 LLM，覆盖成功 / 去重 / 失败 / 进度查询。
 
 ### 任务 5 · 卡片编辑 / 删除 ⬜
 - `PUT /api/cards/{id}`（只改文本字段：stage/title/raw_text/steps，不重新调 AI；同步更新 structured_json）。
