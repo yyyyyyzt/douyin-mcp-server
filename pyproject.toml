@@ -32,6 +32,12 @@ dependencies = [
     "jinja2",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "httpx",
+]
+
 [project.urls]
 Homepage = "https://github.com/yzfly/douyin-mcp-server"
 Repository = "https://github.com/yzfly/douyin-mcp-server"
@@ -39,3 +45,7 @@ Issues = "https://github.com/yzfly/douyin-mcp-server/issues"
 
 [project.scripts]
 douyin-mcp-server = "douyin_mcp_server.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
