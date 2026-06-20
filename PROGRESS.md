@@ -3,7 +3,7 @@
 > 配套阅读：[`docs/DESIGN.md`](docs/DESIGN.md)（总体设计 / 架构 / 接口契约 / 防幻觉策略）。
 > 本文件追踪"做到哪了、下一步做什么、验收标准是什么"，是新 agent 接手的入口。
 
-最后更新：完成任务 1~4（最小闭环 + 抖音链接一键入库：异步任务 + 进度查询 + video_id 去重），并纳入云端环境配置。
+最后更新：完成任务 1~5（最小闭环 + 抖音链接一键入库 + 卡片编辑/删除），并纳入云端环境配置。
 
 ---
 
@@ -15,7 +15,7 @@
 | 2 | LLM 封装（OpenAI 兼容、可替换、重试）| ✅ 已完成 |
 | 3 | 文本录入：文案 → 结构化 → 存库 + API | ✅ 已完成 |
 | 4 | 抖音链接一键入库（异步 + 进度 + 去重）| ✅ 已完成 |
-| 5 | 卡片编辑 / 删除 API | ⬜ 待开发 |
+| 5 | 卡片编辑 / 删除 API | ✅ 已完成 |
 | 6 | 检索层 + 问答 API | ⬜ 待开发 |
 | 7 | 防幻觉（阈值 + 引用 + 警告）| ⬜ 待开发 |
 | 8 | 前端三 Tab + PWA + 联调 | ⬜ 待开发 |
@@ -62,15 +62,20 @@
   绝不静默卡死。
 - 自测工具：`scripts/check_api_keys.py` 验证 LLM / ASR 平台 Key 连通性（`--only llm|asr`）。
 
+### 任务 5 · 卡片编辑 / 删除 ✅
+- 文件：`web/app.py`（测试 `tests/test_api_cards_edit.py`）
+- 能力：
+  - `PUT /api/cards/{id}`：局部更新文本字段 `stage/title/raw_text/steps`（均可选），
+    **不重新调 AI**；同步重写 `structured_json`（保持 stage/title/steps 一致）；
+    未提供的字段保持不变；保留 `video_id` 等来源字段。
+  - `DELETE /api/cards/{id}`：删除卡片，不存在返回 404。
+- 要点：复用 `db.update_card / db.delete_card`，FTS 索引由 AFTER UPDATE/DELETE 触发器
+  自动同步（测试用 `db.search_cards` 断言编辑后新标题命中、旧标题/已删卡片不再命中）；
+  空 body 或空 `raw_text` 返回 400；`steps` 经 `structure._normalize_step` 归一化。
+
 ---
 
 ## 下一步（待开发任务的验收标准）
-
-### 任务 5 · 卡片编辑 / 删除 ⬜
-- `PUT /api/cards/{id}`（只改文本字段：stage/title/raw_text/steps，不重新调 AI；同步更新 structured_json）。
-- `DELETE /api/cards/{id}`。
-- 复用 `db.update_card / db.delete_card`；FTS 索引由触发器自动同步。
-- **验收**：编辑后检索结果随之更新；删除后不再被检索命中（`db` 层测试已验证触发器，补 API 层测试）。
 
 ### 任务 6 · 检索 + 问答 ⬜
 - 新增 `web/core/retrieve.py`：封装 `db.search_cards`，对 < 3 字的短查询做 LIKE 兜底；输出 Top K。
