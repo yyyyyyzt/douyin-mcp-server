@@ -142,8 +142,13 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 | POST | `/api/video/extract` | 抖音链接 → 转写文案（需 ASR Key）|
 | GET | `/api/video/download` | 代理下载无水印视频 |
 | POST | `/api/cards/from-text` | 粘贴文案 → AI 结构化 → 入库（支持多卡）|
+| POST | `/api/cards/from-link` | 抖音链接 → 转写 → 结构化 → 入库（异步，返回 `task_id`）|
+| GET | `/api/cards/task/{task_id}` | 查询链接录入任务进度/结果 |
 | GET | `/api/cards?stage=` | 卡片列表（可按阶段筛选）|
 | GET | `/api/cards/{id}` | 卡片详情（含解析后的 steps）|
+| PUT | `/api/cards/{id}` | 编辑卡片（只改文本，不重新调 AI，同步 structured_json）|
+| DELETE | `/api/cards/{id}` | 删除卡片 |
+| POST | `/api/chat` | 问答：检索 → 拼 prompt → LLM → 带引用回答（含 `grounded`）|
 
 `/api/cards/from-text` 响应示例：
 
@@ -162,13 +167,9 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 
 | 方法 | 路径 | 说明 | 任务 |
 |---|---|---|---|
-| POST | `/api/cards/from-link` | 抖音链接 → 转写 → 结构化 → 入库（异步，返回 task_id）| 4 |
-| GET | `/api/cards/task/{task_id}` | 查询录入任务进度/结果 | 4 |
-| PUT | `/api/cards/{id}` | 编辑卡片（只改文本，不重新调 AI）| 5 |
-| DELETE | `/api/cards/{id}` | 删除卡片 | 5 |
-| POST | `/api/chat` | 问答：检索 → 拼 prompt → LLM → 带引用回答 | 6/7 |
+| —（前端）| `web/templates/index.html` | 三 Tab（提取/知识库/问答）+ PWA | 8 |
 
-`/api/chat` 建议响应结构：
+`/api/chat` 响应结构（已实现）：
 
 ```json
 {
@@ -194,6 +195,10 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
    - 注意：SQLite `bm25()` **越小越相关**。`db.search_cards` 已将其转为 `score = -bm25`
      的正向分值（**越大越相关**），上层据此设经验阈值（无命中或最高分低于阈值 → 判定"无依据"）。
    - trigram 分词器要求查询长度 ≥ 3 字符；过短查询需在 `retrieve` 层做兜底（如 LIKE）。
+   - **实现补充（`web/core/retrieve.py`）**：整句短语 FTS 对「自然语言整句提问」几乎不命中，
+     故在其之上增加 **3-gram 重叠召回**——把问题切成 3 字片段分别检索、按命中片段数排序，
+     实现关键词级别的重合召回；再以整句 LIKE 兜底。`grounded` 判定 = 有召回且最高分 ≥
+     `CHAT_MIN_SCORE`（默认 0.0，可调高以要求更强相关）。
 
 3. **前端展示**：无引用（`grounded=false`）时，回答顶部用黄色警告条提示
    "以下回答未基于你的个人知识库"。
@@ -236,6 +241,7 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 | `LLM_TIMEOUT` | `60` | LLM 请求超时（秒）|
 | `LLM_MAX_RETRIES` | `3` | LLM 重试次数（指数退避）|
 | `KNOWLEDGE_DB` | `data/knowledge.db` | SQLite 文件路径 |
+| `CHAT_MIN_SCORE` | `0.0` | 问答 `grounded` 判定阈值（最高召回分低于此 → 判为无依据）|
 | `PORT` | `8080` | WebUI 端口 |
 
 ---

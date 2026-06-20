@@ -3,7 +3,7 @@
 > 配套阅读：[`docs/DESIGN.md`](docs/DESIGN.md)（总体设计 / 架构 / 接口契约 / 防幻觉策略）。
 > 本文件追踪"做到哪了、下一步做什么、验收标准是什么"，是新 agent 接手的入口。
 
-最后更新：完成任务 1~5（最小闭环 + 抖音链接一键入库 + 卡片编辑/删除），并纳入云端环境配置。
+最后更新：完成任务 1~7（最小闭环 + 抖音链接一键入库 + 卡片编辑/删除 + 检索问答 + 防幻觉），并纳入云端环境配置。
 
 ---
 
@@ -16,8 +16,8 @@
 | 3 | 文本录入：文案 → 结构化 → 存库 + API | ✅ 已完成 |
 | 4 | 抖音链接一键入库（异步 + 进度 + 去重）| ✅ 已完成 |
 | 5 | 卡片编辑 / 删除 API | ✅ 已完成 |
-| 6 | 检索层 + 问答 API | ⬜ 待开发 |
-| 7 | 防幻觉（阈值 + 引用 + 警告）| ⬜ 待开发 |
+| 6 | 检索层 + 问答 API | ✅ 已完成 |
+| 7 | 防幻觉（阈值 + 引用 + 警告）| ✅ 已完成（后端）|
 | 8 | 前端三 Tab + PWA + 联调 | ⬜ 待开发 |
 
 > 说明：原始规划把"建 FTS5 索引"列为任务 6、"防幻觉"为任务 7。本进度表中 FTS5 索引
@@ -73,22 +73,27 @@
   自动同步（测试用 `db.search_cards` 断言编辑后新标题命中、旧标题/已删卡片不再命中）；
   空 body 或空 `raw_text` 返回 400；`steps` 经 `structure._normalize_step` 归一化。
 
+### 任务 6 · 检索 + 问答 ✅
+- 文件：`web/core/retrieve.py`、`web/core/qa.py`（测试 `tests/test_retrieve.py`、`tests/test_qa.py`、
+  `tests/test_api_chat.py`）
+- 检索 `retrieve.retrieve(conn, query, top_k=5)`：
+  1) 整句短语 FTS（短关键词精确路径）→ 2) **3-gram 重叠召回**（把问题切 3 字片段分别检索，
+     按命中片段数排序，解决「整句自然语言提问无法短语命中」的问题）→ 3) 整句 LIKE 兜底；
+     < 3 字超短查询直接 LIKE。
+- 问答 `qa.build_messages(question, cards, grounded)` + `qa.to_citation(card)`：把命中卡片的
+  标题/阶段/步骤/原文注入 prompt，约束模型「只能依据片段作答」；引用对象含 id/title/stage/excerpt/score。
+- API `POST /api/chat`：检索 → 拼 prompt → `llm.chat` → 返回 `answer + grounded + citations`。
+
+### 任务 7 · 防幻觉 ✅（后端）
+- `retrieve.is_grounded(results, min_score)`：无召回或最高分 < 阈值 `CHAT_MIN_SCORE`（默认 0.0）
+  → `grounded=false`，prompt 切换为 `SYSTEM_UNGROUNDED`（先声明「根据你当前的知识库，未找到相关标准」，
+  再给「以下是通用知识，仅供参考：」的免责建议），且不返回任何引用。
+- 真实 LLM 验证：相关问题 `grounded=true` 并引用知识库标准；无关问题 `grounded=false` 且带声明，
+  不编造个人知识。前端黄色警告条留待任务 8 依据 `grounded` 字段渲染。
+
 ---
 
 ## 下一步（待开发任务的验收标准）
-
-### 任务 6 · 检索 + 问答 ⬜
-- 新增 `web/core/retrieve.py`：封装 `db.search_cards`，对 < 3 字的短查询做 LIKE 兜底；输出 Top K。
-- `POST /api/chat`：检索 → 拼 prompt（注入命中卡片原文 + 结构化步骤）→ `llm.chat` → 返回 `answer + citations`。
-- **验收**：能正确命中相关卡片并在回答中引用标题/步骤。
-- **测试**：mock LLM，断言 prompt 含命中卡片、响应含 citations。
-
-### 任务 7 · 防幻觉 ⬜
-- 在任务 6 基础上：无命中或最高 `score` 低于经验阈值 → `grounded=false`，
-  prompt 切换为"未找到相关标准 + 通用参考（带声明）"。
-- 响应增加 `grounded` 字段。
-- **验收**：知识库无关问题不会编造个人知识；返回 `grounded=false` 并带声明。
-- **测试**：空库 / 无关问题 → grounded=false；相关问题 → grounded=true。
 
 ### 任务 8 · 前端 + PWA ⬜
 - `web/templates/index.html` 加顶部三 Tab：提取 / 知识库 / 问答。
@@ -124,4 +129,5 @@
 | `API_KEY` | — | 语音识别密钥（也作 LLM Key 回退）|
 | `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 硅基流动 / Qwen2.5-7B | LLM 配置（可替换供应商）|
 | `KNOWLEDGE_DB` | `data/knowledge.db` | SQLite 路径 |
+| `CHAT_MIN_SCORE` | `0.0` | 问答 grounded 判定阈值（最高分低于此判为无依据）|
 | `PORT` | `8080` | WebUI 端口 |

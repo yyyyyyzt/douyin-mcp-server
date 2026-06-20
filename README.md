@@ -20,10 +20,39 @@
 ## 🚦 当前进度
 
 - ✅ 任务 1~3：知识库存储（SQLite + FTS5 中文检索）、LLM 封装（OpenAI 兼容、可替换供应商）、
-  文本录入与结构化 API（`POST /api/cards/from-text`、`GET /api/cards[/{id}]`）。
-- ⬜ 任务 4~8：抖音链接一键入库、卡片编辑/删除、检索 + 问答、防幻觉、前端三 Tab + PWA。
+  文本录入与结构化。
+- ✅ 任务 4：抖音链接一键入库（异步任务 + 进度查询 + `video_id` 去重）。
+- ✅ 任务 5：卡片编辑 / 删除。
+- ✅ 任务 6~7：检索 + 问答（带引用）+ 防幻觉（`grounded` 判定 + 无依据声明）。
+- ⬜ 任务 8：前端三 Tab + PWA。
 
 详见 [`PROGRESS.md`](PROGRESS.md)。
+
+### 🧩 知识库 API 速查
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/cards/from-text` | 粘贴文案 → AI 结构化 → 入库（支持多卡）|
+| `POST` | `/api/cards/from-link` | 抖音链接 → 转写 → 结构化 → 入库（**异步**，返回 `task_id`）|
+| `GET` | `/api/cards/task/{task_id}` | 查询链接录入进度（`extracting/structuring/done/duplicate/failed`）|
+| `GET` | `/api/cards?stage=` | 卡片列表（可按阶段筛选）|
+| `GET` | `/api/cards/{id}` | 卡片详情 |
+| `PUT` | `/api/cards/{id}` | 编辑卡片文本（不重新调 AI，同步 `structured_json`）|
+| `DELETE` | `/api/cards/{id}` | 删除卡片 |
+| `POST` | `/api/chat` | 知识库问答 → 返回 `answer` + `grounded` + `citations`（防幻觉）|
+
+```bash
+# 链接一键入库（异步：先拿 task_id，再轮询进度）
+curl -X POST localhost:8080/api/cards/from-link -H 'Content-Type: application/json' \
+  -d '{"url":"<抖音分享链接或整段分享文案>"}'
+curl localhost:8080/api/cards/task/<task_id>
+
+# 基于知识库问答（无相关知识时 grounded=false 并给出声明，不编造）
+curl -X POST localhost:8080/api/chat -H 'Content-Type: application/json' \
+  -d '{"question":"卫生间防水要刷多高？"}'
+```
+
+> 自测平台 Key 连通性：`uv run python scripts/check_api_keys.py`（`--only llm|asr`）。
 
 ## ⚡ 快速开始（装修助手）
 
