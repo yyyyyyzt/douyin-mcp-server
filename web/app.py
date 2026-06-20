@@ -25,7 +25,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video" / "scripts"
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
@@ -60,6 +61,38 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI 装修监理助手", version="2.0.0", lifespan=lifespan)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+# 静态资源（PWA 图标 / manifest）
+_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+
+# Service Worker：放在根路径以获得整站 scope（缓存静态外壳，API 不缓存）
+_SERVICE_WORKER_JS = """
+const CACHE = 'reno-assistant-v2';
+self.addEventListener('install', (e) => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.pathname.startsWith('/api/')) return;  // 接口实时请求，不走缓存
+  e.respondWith(
+    fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+      return res;
+    }).catch(() => caches.match(req))
+  );
+});
+"""
+
+
+@app.get("/sw.js")
+async def service_worker():
+    """Service Worker 脚本（根 scope，支持离线外壳与“添加到主屏幕”）。"""
+    return Response(content=_SERVICE_WORKER_JS, media_type="application/javascript")
 
 
 def get_db_path() -> str:

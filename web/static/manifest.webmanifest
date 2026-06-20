@@ -1,0 +1,20 @@
+{
+  "name": "AI 装修监理助手",
+  "short_name": "装修助手",
+  "description": "把短视频里的装修知识沉淀为结构化卡片，并基于个人知识库问答（严格防幻觉）。",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F8F8F8",
+  "theme_color": "#FE2C55",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
