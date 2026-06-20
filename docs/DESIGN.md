@@ -163,13 +163,13 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 }
 ```
 
-### 待实现（契约预定义，便于后续 agent 对齐）
+### 前端（已实现，任务 8）
 
-| 方法 | 路径 | 说明 | 任务 |
-|---|---|---|---|
-| —（前端）| `web/templates/index.html` | 三 Tab（提取/知识库/问答）+ PWA | 8 |
+- `web/templates/index.html`：三 Tab（提取 / 知识库 / 问答），Tailwind CDN + Alpine.js，零构建。
+- PWA：`web/static/manifest.webmanifest` + 根 scope 的 `/sw.js`（`web/app.py` 路由）+ `web/static/icon.svg`，
+  可「添加到主屏幕」；移动端 segmented Tab 自适应。
 
-`/api/chat` 响应结构（已实现）：
+`/api/chat` 响应结构：
 
 ```json
 {
