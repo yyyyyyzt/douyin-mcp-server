@@ -462,6 +462,73 @@ async def get_card_detail(card_id: int, conn=Depends(get_db)):
     return {"success": True, "card": _serialize_card(row)}
 
 
+class CardUpdateRequest(BaseModel):
+    """卡片编辑请求：仅文本字段，均为可选（按需局部更新）。"""
+    stage: Optional[str] = None
+    title: Optional[str] = None
+    raw_text: Optional[str] = None
+    steps: Optional[list] = None
+
+
+@app.put("/api/cards/{card_id}")
+async def update_card_endpoint(card_id: int, req: CardUpdateRequest, conn=Depends(get_db)):
+    """编辑卡片文本字段（stage/title/raw_text/steps），不重新调 AI，同步重写 structured_json。"""
+    provided = req.model_dump(exclude_unset=True)
+    if not provided:
+        raise HTTPException(status_code=400, detail="未提供任何可更新字段")
+
+    row = db.get_card(conn, card_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="卡片不存在")
+    card = dict(row)
+
+    # 现有结构化内容（steps 取自 structured_json，stage/title 以主表列为准）
+    current_steps = []
+    if card.get("structured_json"):
+        try:
+            current_steps = json.loads(card["structured_json"]).get("steps", []) or []
+        except (json.JSONDecodeError, AttributeError):
+            current_steps = []
+
+    new_stage = provided.get("stage", card.get("stage")) if "stage" in provided else card.get("stage")
+    new_title = provided.get("title", card.get("title")) if "title" in provided else card.get("title")
+
+    if "steps" in provided:
+        steps_in = provided["steps"]
+        if steps_in is None:
+            steps_in = []
+        if not isinstance(steps_in, list):
+            raise HTTPException(status_code=400, detail="steps 必须是数组")
+        new_steps = [structure._normalize_step(s, i) for i, s in enumerate(steps_in)]
+    else:
+        new_steps = current_steps
+
+    fields = {
+        "stage": new_stage,
+        "title": new_title,
+        "structured_json": json.dumps(
+            {"stage": new_stage, "title": new_title, "steps": new_steps}, ensure_ascii=False
+        ),
+    }
+
+    if "raw_text" in provided:
+        new_raw = (provided["raw_text"] or "").strip()
+        if not new_raw:
+            raise HTTPException(status_code=400, detail="原文不能为空")
+        fields["raw_text"] = new_raw
+
+    db.update_card(conn, card_id, **fields)
+    return {"success": True, "card": _serialize_card(db.get_card(conn, card_id))}
+
+
+@app.delete("/api/cards/{card_id}")
+async def delete_card_endpoint(card_id: int, conn=Depends(get_db)):
+    """删除卡片（FTS 索引由触发器自动同步）。"""
+    if not db.delete_card(conn, card_id):
+        raise HTTPException(status_code=404, detail="卡片不存在")
+    return {"success": True, "deleted": card_id}
+
+
 def main():
     """启动服务"""
     port = int(os.getenv("PORT", "8080"))
