@@ -32,10 +32,10 @@ import uvicorn
 import requests
 
 # 导入抖音处理模块
-from douyin_downloader import get_video_info, extract_text, HEADERS
+from douyin_downloader import get_video_info, extract_text
 
-# 核心模块：知识库存储、LLM、结构化
-from core import db, structure
+# 核心模块：知识库存储、LLM、结构化、检索、问答
+from core import db, structure, retrieve, qa
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
 
@@ -527,6 +527,42 @@ async def delete_card_endpoint(card_id: int, conn=Depends(get_db)):
     if not db.delete_card(conn, card_id):
         raise HTTPException(status_code=404, detail="卡片不存在")
     return {"success": True, "deleted": card_id}
+
+
+class ChatRequest(BaseModel):
+    """问答请求。"""
+    question: str
+    top_k: Optional[int] = None
+
+
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest, conn=Depends(get_db), llm=Depends(get_llm_client)):
+    """基于知识库的问答：检索 → 拼 prompt → LLM → 带引用回答（防幻觉）。
+
+    无命中或最高分低于阈值 → grounded=false：prompt 切换为「未找到相关标准 + 通用参考(带声明)」，
+    且不返回引用，前端据此展示「未基于个人知识库」的警告。
+    """
+    question = (req.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="问题不能为空")
+
+    top_k = req.top_k if (req.top_k and req.top_k > 0) else retrieve.DEFAULT_TOP_K
+    results = retrieve.retrieve(conn, question, top_k=top_k)
+    grounded = retrieve.is_grounded(results)
+    cards = results if grounded else []
+
+    messages = qa.build_messages(question, cards, grounded)
+    try:
+        answer = llm.chat(messages)
+    except LLMError as e:
+        raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
+
+    return {
+        "success": True,
+        "answer": answer,
+        "grounded": grounded,
+        "citations": [qa.to_citation(c) for c in cards],
+    }
 
 
 def main():
