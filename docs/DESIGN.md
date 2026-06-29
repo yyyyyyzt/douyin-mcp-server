@@ -1,14 +1,15 @@
-# AI 装修监理助手 · 总体设计文档
+# 自装助手 · 总体设计文档
 
 > 本文件是项目的"单一事实来源（Single Source of Truth）"，描述目标、架构、数据模型、
 > 接口契约、防幻觉策略与关键技术决策。任何后续开发（包括新启动的 agent）都应先读本文件，
-> 再读 [`../PROGRESS.md`](../PROGRESS.md) 了解当前进度与下一步。
+> 再读 [`../PROGRESS.md`](../PROGRESS.md) 了解当前进度与下一步；前端重构还必须阅读
+> [`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)。
 
 ---
 
 ## 1. 项目起点（第一性原理）
 
-- **用户**：仅作者本人，无多用户、无登录、无权限。
+- **用户**：当前以作者自用为起点；下一阶段聚焦完全不懂 AI 的手机端自装用户，无多用户、无登录、无权限。
 - **目标**：把在短视频平台上认可的装修知识，沉淀为结构化卡片；与装修公司沟通时，
   基于这些卡片回答问题，**严格防止模型幻觉**。
 - **范围**：只做最核心的「存知识」和「问知识」两条链路。分享、协作、版本化、反馈闭环暂不做。
@@ -42,7 +43,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  前端（web/templates/index.html，Tailwind + Alpine）           │
-│  Tab1 提取  |  Tab2 知识库  |  Tab3 问答        （后续 PWA 化） │
+│  Tab1 收集  |  Tab2 知识库  |  Tab3 问答        （底部固定导航） │
 └───────────────┬─────────────────────────────────────────────┘
                 │ fetch JSON
 ┌───────────────▼─────────────────────────────────────────────┐
@@ -70,7 +71,7 @@
 douyin-mcp-server/
 ├── web/
 │   ├── app.py                  # FastAPI 应用（抖音提取 + 知识库 + 问答）
-│   ├── core/                   # 装修助手核心
+│   ├── core/                   # 自装助手核心
 │   │   ├── db.py               # SQLite + FTS5 存储与检索
 │   │   ├── llm.py              # OpenAI 兼容、可替换供应商的 LLM 客户端
 │   │   └── structure.py        # 文案 -> 结构化知识卡片
@@ -168,6 +169,8 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 - `web/templates/index.html`：三 Tab（提取 / 知识库 / 问答），Tailwind CDN + Alpine.js，零构建。
 - PWA：`web/static/manifest.webmanifest` + 根 scope 的 `/sw.js`（`web/app.py` 路由）+ `web/static/icon.svg`，
   可「添加到主屏幕」；移动端 segmented Tab 自适应。
+- 下一阶段前端重构目标：面向 AI 零基础手机用户，保留 3 个核心入口但改为底部固定 Tab，
+  弱化模型、密钥、结构化等技术词，详见 [`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)。
 
 `/api/chat` 响应结构：
 
@@ -187,7 +190,7 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 ## 6. 防幻觉策略（核心，必须实现）
 
 1. **Prompt 约束**（任务 6/7）：
-   > 你是一名私人装修监理助手，只能根据以下提供的知识片段回答问题。如果片段中没有任何相关信息，
+   > 你是一名私人自装助手，只能根据以下提供的知识片段回答问题。如果片段中没有任何相关信息，
    > 你必须先说"根据你当前的知识库，未找到相关标准"，然后可以补充一段以"以下是通用知识，仅供参考："
    > 开头的建议。绝对不要编造知识库中没有的内容。
 
@@ -212,7 +215,7 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 - **一键化录入**：链接版录入只需一个输入框 + 一个按钮，实时显示进度，
   完成后弹出卡片预览供确认/微调（阶段、标题）。
 - **问答带引用**：回答下方折叠展示引用卡片，可点击查看原文。
-- 顶部三 Tab：提取 / 知识库 / 问答。沿用现有 Tailwind + Alpine，零构建。
+- 底部固定三 Tab：收集 / 知识库 / 问答。沿用现有 Tailwind + Alpine，零构建，优先保证单手操作。
 
 ---
 
