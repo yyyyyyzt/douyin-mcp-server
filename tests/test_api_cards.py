@@ -1,4 +1,4 @@
-"""API 测试（TDD）：/api/cards/from-text 录入 + 列表/详情读取。"""
+"""API 测试：/api/cards/structure 整理预览 + /api/cards/save 纯存储。"""
 
 import json
 
@@ -50,44 +50,64 @@ def client(tmp_path):
     conn.close()
 
 
-def test_from_text_creates_card(client):
+def test_structure_returns_preview_without_save(client):
     c, conn = client
-    resp = c.post("/api/cards/from-text", json={"text": "冷热水管走顶，弹线定位，误差≤2mm，避开承重墙。"})
+    resp = c.post("/api/cards/structure", json={"text": "冷热水管走顶，弹线定位，误差≤2mm，避开承重墙。"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
-    assert len(data["cards"]) == 1
-    card = data["cards"][0]
-    assert card["title"] == "冷热水管走顶规范"
-    assert card["id"] > 0
+    assert data["preview"]["title"] == "冷热水管走顶规范"
+    assert db.list_cards(conn) == []
+
+
+def test_from_text_legacy_is_structure_only(client):
+    c, conn = client
+    resp = c.post("/api/cards/from-text", json={"text": "一段水电文案"})
+    assert resp.status_code == 200
+    assert "preview" in resp.json()
+    assert db.list_cards(conn) == []
+
+
+def test_save_card_persists_without_llm(client):
+    c, conn = client
+    resp = c.post(
+        "/api/cards/save",
+        json={"title": "标题", "content": "正文内容", "transcript": "原始转写"},
+    )
+    assert resp.status_code == 200
+    card = resp.json()["card"]
+    assert card["title"] == "标题"
+    assert card["raw_text"] == "正文内容"
     assert db.get_card(conn, card["id"]) is not None
 
 
-def test_from_text_empty_returns_400(client):
+def test_structure_empty_returns_400(client):
     c, _ = client
-    resp = c.post("/api/cards/from-text", json={"text": "   "})
+    resp = c.post("/api/cards/structure", json={"text": "   "})
     assert resp.status_code == 400
 
 
-def test_list_cards(client):
+def test_save_empty_content_returns_400(client):
     c, _ = client
-    c.post("/api/cards/from-text", json={"text": "一段水电文案"})
+    resp = c.post("/api/cards/save", json={"title": "t", "content": "   "})
+    assert resp.status_code == 400
+
+
+def test_list_cards_after_save(client):
+    c, _ = client
+    c.post("/api/cards/save", json={"title": "A", "content": "内容A"})
     resp = c.get("/api/cards")
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert len(data["cards"]) == 1
+    assert len(resp.json()["cards"]) == 1
 
 
 def test_get_card_detail(client):
     c, _ = client
-    created = c.post("/api/cards/from-text", json={"text": "一段水电文案"}).json()
-    card_id = created["cards"][0]["id"]
+    saved = c.post("/api/cards/save", json={"title": "详情", "content": "一段水电文案"}).json()
+    card_id = saved["card"]["id"]
     resp = c.get(f"/api/cards/{card_id}")
     assert resp.status_code == 200
-    detail = resp.json()["card"]
-    assert detail["id"] == card_id
-    assert detail["title"] == "冷热水管走顶规范"
+    assert resp.json()["card"]["title"] == "详情"
 
 
 def test_get_missing_card_returns_404(client):

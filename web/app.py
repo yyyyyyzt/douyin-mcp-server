@@ -319,7 +319,7 @@ def _run_extract_task(
         task_id,
         status="done",
         progress=100,
-        message="整理完成，请确认后入库",
+        message="整理完成，请编辑后点击入库保存",
         preview=preview,
     )
 
@@ -389,24 +389,49 @@ async def download_video(url: str, filename: str = "video.mp4"):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class CardFromTextRequest(BaseModel):
-    """文本录入请求（手动粘贴，AI 整理后入库）。"""
+class CardStructureRequest(BaseModel):
+    """AI 整理请求（仅生成预览，不入库）。"""
     text: str
+    hint_title: Optional[str] = ""
     api_key: str = ""
 
 
 class CardSaveRequest(BaseModel):
-    """直接保存知识卡片（转写预览确认后，不再调 AI）。"""
-    title: str
+    """保存知识卡片（纯存储，不调用 AI）。"""
+    title: str = ""
     content: str
     video_id: Optional[str] = None
     source_url: Optional[str] = None
     transcript: Optional[str] = None  # 原始转写，写入 structured_json 备查
 
 
+@app.post("/api/cards/structure")
+async def structure_card_preview(req: CardStructureRequest):
+    """将文案 AI 整理为结构化预览（标题 + 内容），不入库。"""
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="文案内容不能为空")
+
+    llm = resolve_llm_client(req.api_key)
+    try:
+        card = structure.structure_text_single(text, llm, hint_title=(req.hint_title or "").strip())
+    except StructureError as e:
+        raise HTTPException(status_code=502, detail=f"AI 整理失败: {e}")
+    except LLMError as e:
+        raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
+
+    return {
+        "success": True,
+        "preview": {
+            "title": card.get("title") or "",
+            "content": card.get("raw_text") or text,
+        },
+    }
+
+
 @app.post("/api/cards/save")
 async def save_card(req: CardSaveRequest, conn=Depends(get_db)):
-    """保存单条知识卡片（每次视频/一次录入对应一条）。"""
+    """保存单条知识卡片（纯存储，不调用 AI）。"""
     title = (req.title or "").strip()
     content = (req.content or "").strip()
     if not content:
@@ -441,33 +466,11 @@ async def save_card(req: CardSaveRequest, conn=Depends(get_db)):
     return {"success": True, "card": _serialize_card(db.get_card(conn, card_id))}
 
 
+# 兼容旧路径：仅整理预览，不入库（请优先使用 /api/cards/structure）
 @app.post("/api/cards/from-text")
-async def create_cards_from_text(
-    req: CardFromTextRequest,
-    conn=Depends(get_db),
-):
-    """手动粘贴文案 -> AI 整理为单条知识 -> 入库。"""
-    text = (req.text or "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="文案内容不能为空")
-
-    llm = resolve_llm_client(req.api_key)
-    try:
-        card = structure.structure_text_single(text, llm)
-    except StructureError as e:
-        raise HTTPException(status_code=502, detail=f"AI 整理失败: {e}")
-    except LLMError as e:
-        raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
-
-    card_id = db.insert_card(
-        conn,
-        title=card["title"],
-        raw_text=card["raw_text"],
-        structured_json=card["structured_json"],
-        source_type="manual",
-    )
-    saved = _serialize_card(db.get_card(conn, card_id))
-    return {"success": True, "cards": [saved], "card": saved}
+async def structure_card_legacy(req: CardStructureRequest):
+    """已废弃入库语义：与 /api/cards/structure 相同，仅返回整理预览。"""
+    return await structure_card_preview(req)
 
 
 # ---------------------------------------------------------------------------
