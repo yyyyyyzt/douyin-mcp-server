@@ -124,3 +124,17 @@ def test_from_env_falls_back_to_api_key(monkeypatch):
     monkeypatch.setenv("API_KEY", "sk-shared")
     client = llm.LLMClient.from_env()
     assert client.api_key == "sk-shared"
+
+
+def test_resolve_prefers_request_api_key(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "sk-env")
+    monkeypatch.setenv("API_KEY", "sk-shared")
+    client = llm.LLMClient.resolve("sk-browser")
+    assert client.api_key == "sk-browser"
+
+
+def test_resolve_falls_back_to_env(monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("API_KEY", "sk-shared")
+    client = llm.LLMClient.resolve("")
+    assert client.api_key == "sk-shared"

@@ -114,6 +114,11 @@ def get_llm_client() -> LLMClient:
     return LLMClient.from_env()
 
 
+def resolve_llm_client(api_key: str = "") -> LLMClient:
+    """请求级 LLM 客户端：浏览器 api_key 优先，其次服务端环境变量。"""
+    return LLMClient.resolve(api_key)
+
+
 def get_extractor() -> Callable:
     """返回抖音解析/转写函数（依赖注入，便于测试 mock，避免真实下载/转写）。"""
     return extract_text
@@ -166,7 +171,7 @@ async def index(request: Request):
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
-    api_key = os.getenv("API_KEY", "")
+    api_key = os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")
     return {
         "status": "ok",
         "api_key_configured": bool(api_key)
@@ -261,19 +266,20 @@ class CardFromTextRequest(BaseModel):
     """文本录入请求。"""
     text: str
     stage: Optional[str] = None
+    api_key: str = ""  # 可选，未传则用环境变量 LLM_API_KEY / API_KEY
 
 
 @app.post("/api/cards/from-text")
 async def create_cards_from_text(
     req: CardFromTextRequest,
     conn=Depends(get_db),
-    llm=Depends(get_llm_client),
 ):
     """粘贴文案 -> AI 结构化 -> 入库（可生成多张卡片）。"""
     text = (req.text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="文案内容不能为空")
 
+    llm = resolve_llm_client(req.api_key)
     try:
         cards = structure.structure_text(text, llm)
     except StructureError as e:
@@ -450,7 +456,6 @@ class CardFromLinkRequest(BaseModel):
 @app.post("/api/cards/from-link")
 async def create_cards_from_link(
     req: CardFromLinkRequest,
-    llm=Depends(get_llm_client),
     db_path: str = Depends(get_db_path),
     extractor: Callable = Depends(get_extractor),
 ):
@@ -460,6 +465,7 @@ async def create_cards_from_link(
         raise HTTPException(status_code=400, detail="链接不能为空")
 
     api_key = req.api_key or os.getenv("API_KEY", "")
+    llm = resolve_llm_client(req.api_key)
     task_id = _new_task(url)
     worker = threading.Thread(
         target=_run_import_task,
@@ -566,10 +572,11 @@ class ChatRequest(BaseModel):
     """问答请求。"""
     question: str
     top_k: Optional[int] = None
+    api_key: str = ""  # 可选，未传则用环境变量 LLM_API_KEY / API_KEY
 
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest, conn=Depends(get_db), llm=Depends(get_llm_client)):
+async def chat_endpoint(req: ChatRequest, conn=Depends(get_db)):
     """基于知识库的问答：检索 → 拼 prompt → LLM → 带引用回答（防幻觉）。
 
     无命中或最高分低于阈值 → grounded=false：prompt 切换为「未找到相关标准 + 通用参考(带声明)」，
@@ -585,6 +592,7 @@ async def chat_endpoint(req: ChatRequest, conn=Depends(get_db), llm=Depends(get_
     cards = results if grounded else []
 
     messages = qa.build_messages(question, cards, grounded)
+    llm = resolve_llm_client(req.api_key)
     try:
         answer = llm.chat(messages)
     except LLMError as e:

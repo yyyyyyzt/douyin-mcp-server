@@ -47,13 +47,18 @@ class LLMClient:
     @classmethod
     def from_env(cls) -> "LLMClient":
         """从环境变量构造。LLM_API_KEY 缺失时回退到 API_KEY（与语音识别共用）。"""
-        api_key = os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")
+        return cls.resolve()
+
+    @classmethod
+    def resolve(cls, api_key: str = "") -> "LLMClient":
+        """解析 API Key：请求体优先，其次 LLM_API_KEY，再回退 API_KEY。"""
+        resolved = (api_key or "").strip() or os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")
         base_url = os.getenv("LLM_BASE_URL", DEFAULT_BASE_URL)
         model = os.getenv("LLM_MODEL", DEFAULT_MODEL)
         timeout = int(os.getenv("LLM_TIMEOUT", str(DEFAULT_TIMEOUT)))
         max_retries = int(os.getenv("LLM_MAX_RETRIES", str(DEFAULT_MAX_RETRIES)))
         return cls(
-            api_key=api_key,
+            api_key=resolved,
             base_url=base_url,
             model=model,
             timeout=timeout,

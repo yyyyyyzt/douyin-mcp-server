@@ -75,12 +75,14 @@ def env(tmp_path):
     fake_extract = _make_fake_extract(calls=extract_calls)
 
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
-    webapp.app.dependency_overrides[webapp.get_llm_client] = lambda: fake_llm
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: fake_extract
+    original_resolve = webapp.resolve_llm_client
+    webapp.resolve_llm_client = lambda api_key="": fake_llm
 
     client = TestClient(webapp.app)
     yield client, conn, db_path, extract_calls
 
+    webapp.resolve_llm_client = original_resolve
     webapp.app.dependency_overrides.clear()
     conn.close()
 
@@ -206,7 +208,7 @@ def test_from_link_multi_cards_only_first_keeps_video_id(env):
         {"stage": "泥木阶段", "title": "瓦工细节A", "steps": []},
         {"stage": "防水阶段", "title": "防水细节B", "steps": []},
     ]
-    webapp.app.dependency_overrides[webapp.get_llm_client] = lambda: FakeLLM([_card_payload(multi)])
+    webapp.resolve_llm_client = lambda api_key="": FakeLLM([_card_payload(multi)])
 
     resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/multi/"})
     task_id = resp.json()["task_id"]

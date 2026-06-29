@@ -44,11 +44,13 @@ def env(tmp_path):
     db.init_db(conn)
 
     llm = RecordingLLM()
+    original_resolve = webapp.resolve_llm_client
+    webapp.resolve_llm_client = lambda api_key="": llm
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
-    webapp.app.dependency_overrides[webapp.get_llm_client] = lambda: llm
 
     client = TestClient(webapp.app)
     yield client, conn, llm
+    webapp.resolve_llm_client = original_resolve
     webapp.app.dependency_overrides.clear()
     conn.close()
 
@@ -105,11 +107,13 @@ def test_chat_llm_error_returns_502(env, tmp_path):
     _seed(conn, "防水阶段", "卫生间防水高度", "卫生间防水要刷到1.8米。")
     err_llm = RecordingLLM(raise_error=True)
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
-    webapp.app.dependency_overrides[webapp.get_llm_client] = lambda: err_llm
+    original_resolve = webapp.resolve_llm_client
+    webapp.resolve_llm_client = lambda api_key="": err_llm
     client = TestClient(webapp.app)
     try:
         resp = client.post("/api/chat", json={"question": "卫生间防水刷多高"})
         assert resp.status_code == 502
     finally:
+        webapp.resolve_llm_client = original_resolve
         webapp.app.dependency_overrides.clear()
         conn.close()

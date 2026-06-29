@@ -167,78 +167,31 @@
 
     <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
 
-        <!-- ===================== Tab 1: 提取 ===================== -->
+        <!-- ===================== Tab 1: 知识收集 ===================== -->
         <div x-show="tab === 'extract'" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-5 space-y-6">
                 <div class="bg-white rounded-2xl shadow-card p-6">
-                    <label class="block text-sm font-medium text-douyin-gray-700 mb-2">分享链接</label>
-                    <textarea x-model="url" placeholder="粘贴抖音分享链接或整段分享文案" rows="4"
-                              class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring transition-smooth" :disabled="loading"></textarea>
-                    <div class="flex gap-3 mt-4">
-                        <button @click="extractInfo" :disabled="!url || loading" class="flex-1 h-11 bg-douyin-gray-100 hover:bg-douyin-gray-200 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">获取信息</button>
-                        <button @click="extractText" :disabled="!url || loading || !apiKeyConfigured" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50 shadow-lg shadow-douyin-red/20">提取文案</button>
-                    </div>
-                    <div x-show="!apiKeyConfigured" @click="showSettings=true" class="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl cursor-pointer text-xs text-amber-800">需要配置 API Key 才能提取文案，点击此处配置。</div>
-                </div>
-
-                <div x-show="loading" class="bg-white rounded-2xl shadow-card p-6">
-                    <div class="flex items-center gap-4">
-                        <div class="relative w-10 h-10"><div class="absolute inset-0 rounded-full border-4 border-douyin-gray-100"></div><div class="absolute inset-0 rounded-full border-4 border-douyin-red border-t-transparent animate-spin-slow"></div></div>
-                        <p class="font-medium text-douyin-gray-900" x-text="loadingText"></p>
-                    </div>
-                </div>
-
-                <div x-show="error" class="bg-red-50 border border-red-100 rounded-2xl p-5 text-sm text-red-700" x-text="error"></div>
-
-                <div x-show="videoInfo" class="bg-white rounded-2xl shadow-card p-6">
-                    <p class="text-xs text-douyin-gray-400 mb-1">视频信息</p>
-                    <h3 class="font-medium text-douyin-gray-900 mb-3" x-text="videoInfo?.title"></h3>
-                    <p class="text-xs font-mono text-douyin-gray-500 mb-3" x-text="'ID: ' + (videoInfo?.video_id||'')"></p>
-                    <a x-show="videoInfo?.download_url" :href="`/api/video/download?url=${encodeURIComponent(videoInfo?.download_url)}&filename=${encodeURIComponent(videoInfo?.video_id||'video')}.mp4`"
-                       class="inline-flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg hover:bg-green-100">下载无水印视频</a>
-                </div>
-            </div>
-
-            <div class="lg:col-span-7">
-                <div x-show="!transcript && !loading" class="bg-white rounded-2xl shadow-card h-full min-h-[360px] flex flex-col items-center justify-center p-8 text-center">
-                    <h3 class="text-lg font-semibold text-douyin-gray-900 mb-2">等待提取</h3>
-                    <p class="text-sm text-douyin-gray-500 max-w-xs">粘贴链接后点击「提取文案」。提取完成可一键加入知识库。</p>
-                </div>
-                <div x-show="transcript" class="bg-white rounded-2xl shadow-card overflow-hidden flex flex-col">
-                    <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between flex-wrap gap-2">
-                        <span class="font-semibold text-douyin-gray-900">提取结果</span>
-                        <div class="flex items-center gap-2">
-                            <button @click="copyTranscript" class="h-9 px-3 bg-douyin-gray-100 hover:bg-douyin-gray-200 rounded-lg text-sm text-douyin-gray-700">复制</button>
-                            <button @click="addExtractToKnowledge" :disabled="kbBusy" class="h-9 px-3 bg-gradient-douyin hover:opacity-90 rounded-lg text-sm text-white disabled:opacity-50">加入知识库</button>
-                        </div>
-                    </div>
-                    <div class="p-6 max-h-[460px] overflow-y-auto"><p class="text-douyin-gray-700 leading-relaxed whitespace-pre-wrap text-sm" x-text="transcript"></p></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ===================== Tab 2: 知识库 ===================== -->
-        <div x-show="tab === 'knowledge'" class="grid grid-cols-1 lg:grid-cols-12 gap-6" style="display:none">
-            <!-- 录入 -->
-            <div class="lg:col-span-5 space-y-6">
-                <div class="bg-white rounded-2xl shadow-card p-6">
                     <div class="inline-flex bg-douyin-gray-100 rounded-lg p-1 gap-1 mb-4">
-                        <button @click="kbMode='link'" class="px-3 py-1.5 rounded-md text-sm transition-smooth" :class="kbMode==='link' ? 'bg-white shadow-sm text-douyin-gray-900' : 'text-douyin-gray-500'">链接录入</button>
-                        <button @click="kbMode='text'" class="px-3 py-1.5 rounded-md text-sm transition-smooth" :class="kbMode==='text' ? 'bg-white shadow-sm text-douyin-gray-900' : 'text-douyin-gray-500'">文本录入</button>
+                        <button @click="collectMode='link'" class="px-3 py-1.5 rounded-md text-sm transition-smooth" :class="collectMode==='link' ? 'bg-white shadow-sm text-douyin-gray-900' : 'text-douyin-gray-500'">链接录入</button>
+                        <button @click="collectMode='text'" class="px-3 py-1.5 rounded-md text-sm transition-smooth" :class="collectMode==='text' ? 'bg-white shadow-sm text-douyin-gray-900' : 'text-douyin-gray-500'">文本录入</button>
                     </div>
 
-                    <div x-show="kbMode==='link'">
-                        <label class="block text-sm font-medium text-douyin-gray-700 mb-2">抖音分享链接</label>
-                        <textarea x-model="linkUrl" rows="3" placeholder="粘贴分享链接或整段分享文案" class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring" :disabled="kbBusy"></textarea>
-                        <button @click="submitLink" :disabled="!linkUrl.trim() || kbBusy" class="mt-3 w-full h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">一键入库（自动转写 + 结构化）</button>
-                        <div x-show="!apiKeyConfigured" class="mt-2 text-xs text-amber-700">提示：链接转写需要 API Key（顶部配置）。</div>
+                    <div x-show="collectMode==='link'">
+                        <label class="block text-sm font-medium text-douyin-gray-700 mb-2">分享链接</label>
+                        <textarea x-model="url" placeholder="粘贴抖音分享链接或整段分享文案" rows="4"
+                                  class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring transition-smooth" :disabled="loading || kbBusy"></textarea>
+                        <div class="flex gap-3 mt-4">
+                            <button @click="extractInfo" :disabled="!url || loading || kbBusy" class="flex-1 h-11 bg-douyin-gray-100 hover:bg-douyin-gray-200 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">获取信息</button>
+                            <button @click="extractText" :disabled="!url || loading || kbBusy || !apiKeyConfigured" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50 shadow-lg shadow-douyin-red/20">提取文案</button>
+                        </div>
+                        <button @click="submitLink" :disabled="!url.trim() || kbBusy || !apiKeyConfigured" class="mt-3 w-full h-11 border border-douyin-gray-200 hover:bg-douyin-gray-50 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">一键入库（自动转写 + 结构化）</button>
                     </div>
 
-                    <div x-show="kbMode==='text'" style="display:none">
-                        <label class="block text-sm font-medium text-douyin-gray-700 mb-2">粘贴文案</label>
-                        <textarea x-model="textInput" rows="5" placeholder="粘贴一段装修文案，AI 自动结构化为卡片" class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring" :disabled="kbBusy"></textarea>
-                        <button @click="submitText" :disabled="!textInput.trim() || kbBusy" class="mt-3 w-full h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">结构化并入库</button>
+                    <div x-show="collectMode==='text'" style="display:none">
+                        <p class="text-sm text-douyin-gray-500">在右侧编辑区粘贴或输入文案，确认后点击「加入知识库」完成结构化入库。</p>
                     </div>
+
+                    <div x-show="!apiKeyConfigured" @click="showSettings=true" class="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl cursor-pointer text-xs text-amber-800">链接转写与 AI 结构化需要 API Key，点击此处配置。</div>
 
                     <!-- 进度 -->
                     <div x-show="importTask" class="mt-4 p-3 bg-douyin-gray-50 rounded-xl" style="display:none">
@@ -251,52 +204,92 @@
                             <span class="text-xs text-douyin-gray-400" x-text="(importTask?.progress||0)+'%'"></span>
                         </div>
                     </div>
-                    <div x-show="kbError" class="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700" x-text="kbError" style="display:none"></div>
+                </div>
+
+                <div x-show="loading" class="bg-white rounded-2xl shadow-card p-6">
+                    <div class="flex items-center gap-4">
+                        <div class="relative w-10 h-10"><div class="absolute inset-0 rounded-full border-4 border-douyin-gray-100"></div><div class="absolute inset-0 rounded-full border-4 border-douyin-red border-t-transparent animate-spin-slow"></div></div>
+                        <p class="font-medium text-douyin-gray-900" x-text="loadingText"></p>
+                    </div>
+                </div>
+
+                <div x-show="collectError" class="bg-red-50 border border-red-100 rounded-2xl p-5 text-sm text-red-700" x-text="collectError" style="display:none"></div>
+
+                <div x-show="videoInfo" class="bg-white rounded-2xl shadow-card p-6">
+                    <p class="text-xs text-douyin-gray-400 mb-1">视频信息</p>
+                    <h3 class="font-medium text-douyin-gray-900 mb-3" x-text="videoInfo?.title"></h3>
+                    <p class="text-xs font-mono text-douyin-gray-500 mb-3" x-text="'ID: ' + (videoInfo?.video_id||'')"></p>
+                    <a x-show="videoInfo?.download_url" :href="`/api/video/download?url=${encodeURIComponent(videoInfo?.download_url)}&filename=${encodeURIComponent(videoInfo?.video_id||'video')}.mp4`"
+                       class="inline-flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg hover:bg-green-100">下载无水印视频</a>
                 </div>
             </div>
 
-            <!-- 列表 -->
             <div class="lg:col-span-7">
-                <div class="bg-white rounded-2xl shadow-card overflow-hidden">
-                    <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between">
-                        <span class="font-semibold text-douyin-gray-900">知识卡片 <span class="text-douyin-gray-400 text-sm" x-text="'('+cards.length+')'"></span></span>
-                        <button @click="loadCards" class="text-sm text-douyin-gray-500 hover:text-douyin-red">刷新</button>
+                <div class="bg-white rounded-2xl shadow-card overflow-hidden flex flex-col min-h-[360px]">
+                    <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                            <span class="font-semibold text-douyin-gray-900">知识内容</span>
+                            <p class="text-xs text-douyin-gray-400 mt-0.5">可编辑、可粘贴，确认后入库</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @click="copyCollectText" :disabled="!collectText.trim()" class="h-9 px-3 bg-douyin-gray-100 hover:bg-douyin-gray-200 rounded-lg text-sm text-douyin-gray-700 disabled:opacity-50">复制</button>
+                            <button @click="addToKnowledge" :disabled="!collectText.trim() || kbBusy || !apiKeyConfigured" class="h-9 px-3 bg-gradient-douyin hover:opacity-90 rounded-lg text-sm text-white disabled:opacity-50">加入知识库</button>
+                        </div>
                     </div>
-                    <!-- 阶段筛选 -->
-                    <div x-show="stages.length" class="px-6 pt-3 flex flex-wrap gap-2">
-                        <button @click="filterStage=''; loadCards()" class="px-2.5 py-1 rounded-full text-xs transition-smooth" :class="!filterStage ? 'bg-douyin-red text-white' : 'bg-douyin-gray-100 text-douyin-gray-600'">全部</button>
-                        <template x-for="s in stages" :key="s">
-                            <button @click="filterStage=s; loadCards()" class="px-2.5 py-1 rounded-full text-xs transition-smooth" :class="filterStage===s ? 'bg-douyin-red text-white' : 'bg-douyin-gray-100 text-douyin-gray-600'" x-text="s"></button>
-                        </template>
+                    <div class="p-4 flex-1 flex flex-col">
+                        <textarea x-model="collectText" rows="16" placeholder="在此粘贴或输入装修知识文案；链接提取后会自动填入，也可直接编辑修正"
+                                  class="w-full flex-1 min-h-[280px] px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring text-douyin-gray-700 leading-relaxed"></textarea>
                     </div>
+                </div>
+            </div>
+        </div>
 
-                    <div class="p-4 space-y-3 max-h-[600px] overflow-y-auto">
-                        <div x-show="cardsLoading" class="text-center text-sm text-douyin-gray-400 py-8">加载中…</div>
-                        <div x-show="!cardsLoading && cards.length===0" class="text-center text-sm text-douyin-gray-400 py-8">还没有卡片，去左侧录入吧。</div>
-                        <template x-for="c in cards" :key="c.id">
-                            <div class="p-4 border border-douyin-gray-100 rounded-xl hover:shadow-card transition-smooth">
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="min-w-0">
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <span class="px-2 py-0.5 bg-douyin-red/10 text-douyin-red rounded text-xs" x-text="c.stage || '未分类'"></span>
-                                            <span x-show="c.video_id" class="px-2 py-0.5 bg-douyin-gray-100 text-douyin-gray-500 rounded text-xs">抖音</span>
-                                        </div>
-                                        <h4 class="font-medium text-douyin-gray-900 mt-1.5" x-text="c.title || '(无标题)'"></h4>
+        <!-- ===================== Tab 2: 知识库（仅整理） ===================== -->
+        <div x-show="tab === 'knowledge'" style="display:none">
+            <div class="bg-white rounded-2xl shadow-card overflow-hidden">
+                <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between">
+                    <div>
+                        <span class="font-semibold text-douyin-gray-900">知识卡片 <span class="text-douyin-gray-400 text-sm" x-text="'('+cards.length+')'"></span></span>
+                        <p class="text-xs text-douyin-gray-400 mt-0.5">编辑、筛选与删除已入库的知识</p>
+                    </div>
+                    <button @click="loadCards" class="text-sm text-douyin-gray-500 hover:text-douyin-red">刷新</button>
+                </div>
+                <!-- 阶段筛选 -->
+                <div x-show="stages.length" class="px-6 pt-3 flex flex-wrap gap-2">
+                    <button @click="filterStage=''; loadCards()" class="px-2.5 py-1 rounded-full text-xs transition-smooth" :class="!filterStage ? 'bg-douyin-red text-white' : 'bg-douyin-gray-100 text-douyin-gray-600'">全部</button>
+                    <template x-for="s in stages" :key="s">
+                        <button @click="filterStage=s; loadCards()" class="px-2.5 py-1 rounded-full text-xs transition-smooth" :class="filterStage===s ? 'bg-douyin-red text-white' : 'bg-douyin-gray-100 text-douyin-gray-600'" x-text="s"></button>
+                    </template>
+                </div>
+
+                <div x-show="kbError" class="mx-6 mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700" x-text="kbError" style="display:none"></div>
+
+                <div class="p-4 space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+                    <div x-show="cardsLoading" class="text-center text-sm text-douyin-gray-400 py-8">加载中…</div>
+                    <div x-show="!cardsLoading && cards.length===0" class="text-center text-sm text-douyin-gray-400 py-12">还没有卡片，请前往「知识收集」录入。</div>
+                    <template x-for="c in cards" :key="c.id">
+                        <div class="p-4 border border-douyin-gray-100 rounded-xl hover:shadow-card transition-smooth">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="px-2 py-0.5 bg-douyin-red/10 text-douyin-red rounded text-xs" x-text="c.stage || '未分类'"></span>
+                                        <span x-show="c.video_id" class="px-2 py-0.5 bg-douyin-gray-100 text-douyin-gray-500 rounded text-xs">抖音</span>
                                     </div>
-                                    <div class="flex gap-1 flex-shrink-0">
-                                        <button @click="editOpen(c)" class="px-2 py-1 text-xs text-douyin-gray-600 hover:bg-douyin-gray-100 rounded">编辑</button>
-                                        <button @click="deleteCard(c.id)" class="px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded">删除</button>
-                                    </div>
+                                    <h4 class="font-medium text-douyin-gray-900 mt-1.5" x-text="c.title || '(无标题)'"></h4>
                                 </div>
-                                <p class="text-sm text-douyin-gray-500 mt-2 line-clamp-3" x-text="c.raw_text"></p>
-                                <div x-show="c.steps && c.steps.length" class="mt-2 space-y-1">
-                                    <template x-for="(s,i) in c.steps" :key="i">
-                                        <p class="text-xs text-douyin-gray-600">· <span x-text="s.action"></span><span x-show="s.standard" class="text-douyin-gray-400" x-text="'（'+s.standard+'）'"></span></p>
-                                    </template>
+                                <div class="flex gap-1 flex-shrink-0">
+                                    <button @click="editOpen(c)" class="px-2 py-1 text-xs text-douyin-gray-600 hover:bg-douyin-gray-100 rounded">编辑</button>
+                                    <button @click="deleteCard(c.id)" class="px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded">删除</button>
                                 </div>
                             </div>
-                        </template>
-                    </div>
+                            <p class="text-sm text-douyin-gray-500 mt-2 line-clamp-3" x-text="c.raw_text"></p>
+                            <div x-show="c.steps && c.steps.length" class="mt-2 space-y-1">
+                                <template x-for="(s,i) in c.steps" :key="i">
+                                    <p class="text-xs text-douyin-gray-600">· <span x-text="s.action"></span><span x-show="s.standard" class="text-douyin-gray-400" x-text="'（'+s.standard+'）'"></span></p>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -368,15 +361,16 @@
             return {
                 // 通用
                 tab: 'extract',
-                tabs: [ {id:'extract',label:'提取'}, {id:'knowledge',label:'知识库'}, {id:'chat',label:'问答'} ],
+                tabs: [ {id:'extract',label:'知识收集'}, {id:'knowledge',label:'知识库'}, {id:'chat',label:'问答'} ],
                 toast: '',
                 showSettings: false, showApiKey: false,
                 apiKey: '', apiKeyInput: '', serverApiKeyConfigured: false,
-                // 提取
-                url:'', loading:false, loadingText:'', error:'', videoInfo:null, transcript:'',
+                // 知识收集
+                collectMode: 'link', url:'', collectText:'',
+                loading:false, loadingText:'', collectError:'', videoInfo:null,
+                kbBusy:false, importTask:null,
                 // 知识库
-                kbMode:'link', linkUrl:'', textInput:'', kbBusy:false, kbError:'', importTask:null,
-                cards:[], cardsLoading:false, filterStage:'', stages:[], kbLoaded:false,
+                cards:[], cardsLoading:false, filterStage:'', stages:[], kbLoaded:false, kbError:'',
                 showEdit:false, editCard:null,
                 // 问答
                 messages:[], chatInput:'', chatLoading:false,
@@ -397,31 +391,56 @@
                 saveApiKey(){ if(this.apiKeyInput){ this.apiKey=this.apiKeyInput; localStorage.setItem('reno_api_key',this.apiKeyInput); this.showSettings=false; this.showToast('API Key 已保存'); } },
                 clearApiKey(){ this.apiKey=''; this.apiKeyInput=''; localStorage.removeItem('reno_api_key'); this.showToast('已清除'); },
 
-                // ---------- 提取 ----------
+                // ---------- 知识收集 ----------
                 async extractInfo(){
                     if(!this.url||this.loading) return;
-                    this.error=''; this.videoInfo=null; this.transcript=''; this.loading=true; this.loadingText='正在获取视频信息…';
+                    this.collectError=''; this.videoInfo=null; this.loading=true; this.loadingText='正在获取视频信息…';
                     try{ const r=await fetch('/api/video/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url})}); const d=await r.json();
-                        if(d.success){ this.videoInfo=d; } else { this.error=d.error||'获取失败'; } }
-                    catch(e){ this.error='网络错误'; } finally{ this.loading=false; }
+                        if(d.success){ this.videoInfo=d; } else { this.collectError=d.error||'获取失败'; } }
+                    catch(e){ this.collectError='网络错误'; } finally{ this.loading=false; }
                 },
                 async extractText(){
                     if(!this.url||this.loading) return;
                     if(!this.apiKeyConfigured){ this.showSettings=true; return; }
-                    this.error=''; this.videoInfo=null; this.transcript=''; this.loading=true; this.loadingText='正在下载并转写视频（约 20~60s）…';
+                    this.collectError=''; this.videoInfo=null; this.loading=true; this.loadingText='正在下载并转写视频（约 20~60s）…';
                     try{ const r=await fetch('/api/video/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,api_key:this.apiKey})}); const d=await r.json();
-                        if(d.success){ this.videoInfo={video_id:d.video_id,title:d.title,download_url:d.download_url}; this.transcript=d.text; this.showToast('文案提取成功'); }
-                        else { this.error=d.error||'提取失败'; } }
-                    catch(e){ this.error='网络错误'; } finally{ this.loading=false; }
+                        if(d.success){ this.videoInfo={video_id:d.video_id,title:d.title,download_url:d.download_url}; this.collectText=d.text; this.showToast('文案提取成功'); }
+                        else { this.collectError=d.error||'提取失败'; } }
+                    catch(e){ this.collectError='网络错误'; } finally{ this.loading=false; }
                 },
-                async copyTranscript(){ try{ await navigator.clipboard.writeText(this.transcript); this.showToast('已复制'); }catch(e){ this.showToast('复制失败'); } },
-                async addExtractToKnowledge(){
-                    if(!this.transcript || this.kbBusy) return;
-                    this.kbBusy=true;
-                    try{ const r=await fetch('/api/cards/from-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:this.transcript})}); const d=await r.json();
+                async copyCollectText(){ try{ await navigator.clipboard.writeText(this.collectText); this.showToast('已复制'); }catch(e){ this.showToast('复制失败'); } },
+                async addToKnowledge(){
+                    const text = (this.collectText||'').trim();
+                    if(!text || this.kbBusy) return;
+                    if(!this.apiKeyConfigured){ this.showSettings=true; return; }
+                    this.kbBusy=true; this.collectError='';
+                    try{ const r=await fetch('/api/cards/from-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,api_key:this.apiKey})}); const d=await r.json();
                         if(r.ok&&d.success){ this.showToast(`已加入知识库（${d.cards.length} 张卡片）`); this.kbLoaded=false; }
-                        else { this.showToast(d.detail||'入库失败'); } }
-                    catch(e){ this.showToast('网络错误'); } finally{ this.kbBusy=false; }
+                        else { this.collectError=d.detail||'入库失败'; } }
+                    catch(e){ this.collectError='网络错误'; } finally{ this.kbBusy=false; }
+                },
+                async submitLink(){
+                    if(!this.url.trim()||this.kbBusy) return;
+                    if(!this.apiKeyConfigured){ this.showSettings=true; return; }
+                    this.kbBusy=true; this.collectError=''; this.importTask={status:'pending',phase:'排队中',progress:0,message:'已提交'};
+                    try{ const r=await fetch('/api/cards/from-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,api_key:this.apiKey})}); const d=await r.json();
+                        if(!d.success){ this.collectError=d.detail||'提交失败'; this.kbBusy=false; this.importTask=null; return; }
+                        this.pollTask(d.task_id); }
+                    catch(e){ this.collectError='网络错误'; this.kbBusy=false; this.importTask=null; }
+                },
+                pollTask(taskId){
+                    const tick=async()=>{
+                        try{ const r=await fetch('/api/cards/task/'+taskId); const d=await r.json(); this.importTask=d.task;
+                            if(['done','duplicate','failed'].includes(d.task.status)){
+                                this.kbBusy=false;
+                                if(d.task.status==='failed'){ this.collectError=d.task.error||'录入失败'; }
+                                else { this.showToast(d.task.status==='duplicate'?'该视频已入库':'入库完成'); this.kbLoaded=false; }
+                                setTimeout(()=>{ this.importTask=null; }, 4000);
+                                return;
+                            } }catch(e){}
+                        setTimeout(tick,1200);
+                    };
+                    tick();
                 },
 
                 // ---------- 知识库 ----------
@@ -431,36 +450,6 @@
                         this.cards=d.cards||[];
                         if(!this.filterStage){ this.stages=[...new Set(this.cards.map(c=>c.stage).filter(Boolean))]; } }
                     catch(e){ this.kbError='加载卡片失败'; } finally{ this.cardsLoading=false; }
-                },
-                async submitText(){
-                    if(!this.textInput.trim()||this.kbBusy) return;
-                    this.kbBusy=true; this.kbError=''; this.importTask=null;
-                    try{ const r=await fetch('/api/cards/from-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:this.textInput})}); const d=await r.json();
-                        if(r.ok&&d.success){ this.showToast(`已生成 ${d.cards.length} 张卡片`); this.textInput=''; await this.loadCards(); }
-                        else { this.kbError=d.detail||'结构化失败'; } }
-                    catch(e){ this.kbError='网络错误'; } finally{ this.kbBusy=false; }
-                },
-                async submitLink(){
-                    if(!this.linkUrl.trim()||this.kbBusy) return;
-                    this.kbBusy=true; this.kbError=''; this.importTask={status:'pending',phase:'排队中',progress:0,message:'已提交'};
-                    try{ const r=await fetch('/api/cards/from-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.linkUrl,api_key:this.apiKey})}); const d=await r.json();
-                        if(!d.success){ this.kbError=d.detail||'提交失败'; this.kbBusy=false; this.importTask=null; return; }
-                        this.pollTask(d.task_id); }
-                    catch(e){ this.kbError='网络错误'; this.kbBusy=false; this.importTask=null; }
-                },
-                pollTask(taskId){
-                    const tick=async()=>{
-                        try{ const r=await fetch('/api/cards/task/'+taskId); const d=await r.json(); this.importTask=d.task;
-                            if(['done','duplicate','failed'].includes(d.task.status)){
-                                this.kbBusy=false;
-                                if(d.task.status==='failed'){ this.kbError=d.task.error||'录入失败'; }
-                                else { this.showToast(d.task.status==='duplicate'?'该视频已入库':'入库完成'); this.linkUrl=''; await this.loadCards(); }
-                                setTimeout(()=>{ this.importTask=null; }, 4000);
-                                return;
-                            } }catch(e){}
-                        setTimeout(tick,1200);
-                    };
-                    tick();
                 },
                 editOpen(c){ this.editCard={ id:c.id, stage:c.stage||'', title:c.title||'', raw_text:c.raw_text||'', steps: JSON.parse(JSON.stringify(c.steps||[])) }; this.showEdit=true; },
                 addStep(){ this.editCard.steps.push({order:this.editCard.steps.length+1,action:'',detail:'',standard:'',warning:''}); },
@@ -488,7 +477,7 @@
                     this.messages.push({role:'assistant',content:'',pending:true,grounded:true,citations:[],showCite:false});
                     this.$nextTick(()=>this.scrollChat());
                     const msg=this.messages[this.messages.length-1];
-                    try{ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})}); const d=await r.json();
+                    try{ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,api_key:this.apiKey})}); const d=await r.json();
                         if(r.ok&&d.success){ msg.content=d.answer; msg.grounded=d.grounded; msg.citations=d.citations||[]; }
                         else { msg.content=d.detail||'出错了'; msg.error=true; } }
                     catch(e){ msg.content='网络错误'; msg.error=true; }

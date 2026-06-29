@@ -39,12 +39,14 @@ def client(tmp_path):
         ])
     ])
 
-    def _get_llm():
+    def _resolve_llm(api_key=""):
         return fake
 
     webapp.app.dependency_overrides[webapp.get_db] = _get_db
-    webapp.app.dependency_overrides[webapp.get_llm_client] = _get_llm
+    original_resolve = webapp.resolve_llm_client
+    webapp.resolve_llm_client = _resolve_llm
     yield TestClient(webapp.app), conn
+    webapp.resolve_llm_client = original_resolve
     webapp.app.dependency_overrides.clear()
     conn.close()
 
