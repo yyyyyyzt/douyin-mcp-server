@@ -30,8 +30,11 @@ import argparse
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 from datetime import datetime
+
+# 进度回调：phase(str), progress(int 0-100), message(str)
+ProgressCallback = Callable[[str, int, str], None]
 
 
 def check_dependencies():
@@ -66,6 +69,45 @@ HEADERS = {
 DEFAULT_API_BASE_URL = "https://api.siliconflow.cn/v1/audio/transcriptions"
 DEFAULT_ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
 DEFAULT_MODEL = DEFAULT_ASR_MODEL  # 向后兼容旧引用
+
+
+def get_video_cache_dir() -> Path:
+    """视频与转写缓存目录（可用 VIDEO_CACHE_DIR 覆盖）。"""
+    env = os.getenv("VIDEO_CACHE_DIR")
+    if env:
+        cache = Path(env)
+    else:
+        cache = Path(__file__).resolve().parents[2] / "data" / "video_cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    return cache
+
+
+def get_cached_video_path(video_id: str) -> Optional[Path]:
+    """按 video_id 查找已缓存的视频文件。"""
+    if not video_id:
+        return None
+    path = get_video_cache_dir() / f"{video_id}.mp4"
+    if path.exists() and path.stat().st_size > 1024:
+        return path
+    return None
+
+
+def get_cached_transcript_path(video_id: str) -> Optional[Path]:
+    """按 video_id 查找已缓存的转写文本。"""
+    if not video_id:
+        return None
+    path = get_video_cache_dir() / f"{video_id}.transcript.txt"
+    if path.exists() and path.stat().st_size > 0:
+        return path
+    return None
+
+
+def save_transcript_cache(video_id: str, text: str) -> None:
+    """缓存转写结果，避免同一视频重复调用 ASR。"""
+    if not video_id or not text:
+        return
+    path = get_video_cache_dir() / f"{video_id}.transcript.txt"
+    path.write_text(text, encoding="utf-8")
 
 
 class DouyinProcessor:
@@ -134,8 +176,14 @@ class DouyinProcessor:
             "video_id": video_id
         }
 
-    def download_video(self, video_info: dict, output_dir: Optional[Path] = None, show_progress: bool = True) -> Path:
-        """下载视频"""
+    def download_video(
+        self,
+        video_info: dict,
+        output_dir: Optional[Path] = None,
+        show_progress: bool = True,
+        on_byte_progress: Optional[Callable[[int], None]] = None,
+    ) -> Path:
+        """下载视频；若 output_dir 中已有同 video_id 文件则直接复用。"""
         if output_dir is None:
             output_dir = self.temp_dir
         else:
@@ -145,25 +193,33 @@ class DouyinProcessor:
         filename = f"{video_info['video_id']}.mp4"
         filepath = output_dir / filename
 
+        if filepath.exists() and filepath.stat().st_size > 1024:
+            if show_progress:
+                print(f"使用缓存视频: {filepath}")
+            if on_byte_progress:
+                on_byte_progress(100)
+            return filepath
+
         if show_progress:
             print(f"正在下载视频: {video_info['title']}")
 
         response = requests.get(video_info['url'], headers=HEADERS, stream=True)
         response.raise_for_status()
 
-        # 获取文件大小
         total_size = int(response.headers.get('content-length', 0))
-
-        # 下载文件
         downloaded = 0
         with open(filepath, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
-                    if show_progress and total_size > 0:
-                        progress = downloaded / total_size * 100
-                        print(f"\r下载进度: {progress:.1f}%", end="", flush=True)
+                    if total_size > 0:
+                        pct = int(downloaded / total_size * 100)
+                        if on_byte_progress:
+                            on_byte_progress(pct)
+                        if show_progress:
+                            progress = downloaded / total_size * 100
+                            print(f"\r下载进度: {progress:.1f}%", end="", flush=True)
 
         if show_progress:
             print(f"\n视频下载完成: {filepath}")
@@ -343,40 +399,89 @@ def download_video(share_link: str, output_dir: str = ".") -> Path:
 
 def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Optional[str] = None,
                  save_video: bool = False, show_progress: bool = True,
-                 asr_model: Optional[str] = None) -> dict:
+                 asr_model: Optional[str] = None,
+                 on_progress: Optional[ProgressCallback] = None,
+                 use_cache: bool = True) -> dict:
     """
     从视频中提取文案并保存到文件
 
     返回:
-        dict: 包含 video_info, text, output_path 的字典
+        dict: 包含 video_info, text, output_path, cached_video, cached_transcript
     """
+    def report(phase: str, progress: int, message: str) -> None:
+        if on_progress:
+            on_progress(phase, progress, message)
+
     api_key = api_key or os.getenv('API_KEY')
     if not api_key:
         raise ValueError("未设置环境变量 API_KEY，请先获取硅基流动 API 密钥")
 
     asr_model = asr_model or os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
     processor = DouyinProcessor(api_key, model=asr_model)
+    cache_dir = get_video_cache_dir() if use_cache else None
 
+    report("parsing", 5, "正在解析抖音链接…")
     if show_progress:
         print("正在解析抖音分享链接...")
     video_info = processor.parse_share_url(share_link)
+    video_id = video_info.get("video_id", "")
+    cached_video = False
+    cached_transcript = False
 
+    if use_cache:
+        transcript_path = get_cached_transcript_path(video_id)
+        if transcript_path:
+            report("transcribing", 80, "使用已缓存的转写结果")
+            text_content = transcript_path.read_text(encoding="utf-8")
+            return {
+                "video_info": video_info,
+                "text": text_content,
+                "output_path": None,
+                "cached_video": bool(get_cached_video_path(video_id)),
+                "cached_transcript": True,
+            }
+
+    def _download_progress(pct: int) -> None:
+        # 下载阶段约占 15% ~ 40%
+        report("downloading", 15 + int(pct * 0.25), "正在下载视频…")
+
+    report("downloading", 15, "正在检查视频缓存…")
     if show_progress:
         print("正在下载视频...")
-    video_path = processor.download_video(video_info, show_progress=show_progress)
+    existing = get_cached_video_path(video_id) if use_cache else None
+    if existing:
+        report("downloading", 40, "命中视频缓存，跳过下载")
+        cached_video = True
+        video_path = existing
+    else:
+        download_dir = cache_dir if cache_dir else processor.temp_dir
+        video_path = processor.download_video(
+            video_info,
+            output_dir=download_dir,
+            show_progress=show_progress,
+            on_byte_progress=_download_progress if on_progress else None,
+        )
 
+    report("extracting_audio", 45, "正在提取音频…")
     if show_progress:
         print("正在提取音频...")
     audio_path = processor.extract_audio(video_path, show_progress=show_progress)
 
+    report("transcribing", 55, "正在语音识别…")
     if show_progress:
         print("正在从音频中提取文本...")
     text_content = processor.extract_text_from_audio(audio_path, show_progress=show_progress)
+    report("transcribing", 75, "语音识别完成")
+
+    if use_cache and video_id:
+        save_transcript_cache(video_id, text_content)
 
     result = {
         "video_info": video_info,
         "text": text_content,
-        "output_path": None
+        "output_path": None,
+        "cached_video": cached_video,
+        "cached_transcript": False,
     }
 
     # 保存到文件
@@ -410,10 +515,12 @@ def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Opt
             if show_progress:
                 print(f"视频已保存到: {saved_video_path}")
 
-    # 清理临时文件
+    # 清理临时音频；缓存目录中的视频保留
     if show_progress:
         print("正在清理临时文件...")
-    processor.cleanup_files(video_path, audio_path)
+    processor.cleanup_files(audio_path)
+    if cache_dir is None or video_path.parent != cache_dir:
+        processor.cleanup_files(video_path)
 
     return result
 

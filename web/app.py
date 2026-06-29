@@ -185,17 +185,152 @@ async def get_info(req: VideoRequest):
         return VideoInfoResponse(success=False, error=str(e))
 
 
-@app.post("/api/video/extract", response_model=ExtractResponse)
-async def extract_transcript(req: VideoRequest):
-    """提取视频文案（需要 API_KEY）"""
-    # 优先使用请求中的 API Key，其次使用环境变量
+@app.post("/api/video/extract")
+async def extract_transcript_async(
+    req: VideoRequest,
+    extractor: Callable = Depends(get_extractor),
+):
+    """异步转写抖音视频：解析 → 下载(可缓存) → 转写 → AI 整理，返回 task_id 供轮询。"""
     api_key = req.api_key or os.getenv("API_KEY", "")
     if not api_key:
-        return ExtractResponse(
-            success=False,
-            error="请先配置 API Key"
-        )
+        raise HTTPException(status_code=400, detail="请先配置 API Key")
 
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="链接不能为空")
+
+    task_id = _new_extract_task(url, api_key)
+    llm = resolve_llm_client(req.api_key)
+    worker = threading.Thread(
+        target=_run_extract_task,
+        args=(task_id, url, api_key, extractor, llm),
+        daemon=True,
+    )
+    worker.start()
+    return {"success": True, "task_id": task_id, "task": _get_extract_task(task_id)}
+
+
+@app.get("/api/video/extract/task/{task_id}")
+async def get_extract_task(task_id: str):
+    """查询转写任务进度与结构化预览结果。"""
+    task = _get_extract_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"success": True, "task": task}
+
+
+def _new_extract_task(url: str, api_key: str) -> str:
+    task_id = uuid.uuid4().hex
+    with _tasks_lock:
+        _extract_tasks[task_id] = {
+            "task_id": task_id,
+            "status": "pending",
+            "phase": _TASK_PHASES["pending"],
+            "progress": 0,
+            "url": url,
+            "video_id": None,
+            "title": None,
+            "message": "已加入队列",
+            "error": None,
+            "transcript": "",
+            "preview": None,
+            "cached_video": False,
+            "cached_transcript": False,
+        }
+    return task_id
+
+
+def _update_extract_task(task_id: str, *, status: Optional[str] = None, **fields) -> None:
+    with _tasks_lock:
+        task = _extract_tasks.get(task_id)
+        if task is None:
+            return
+        if status is not None:
+            task["status"] = status
+            task["phase"] = _TASK_PHASES.get(status, status)
+        task.update(fields)
+
+
+def _get_extract_task(task_id: str) -> Optional[dict]:
+    with _tasks_lock:
+        task = _extract_tasks.get(task_id)
+        return dict(task) if task else None
+
+
+def _run_extract_task(
+    task_id: str,
+    url: str,
+    api_key: str,
+    extractor: Callable,
+    llm,
+) -> None:
+    """后台：转写 + 单条结构化预览（不入库，待用户确认）。"""
+
+    def on_progress(phase: str, progress: int, message: str) -> None:
+        _update_extract_task(task_id, status=phase, progress=progress, message=message)
+
+    try:
+        _update_extract_task(task_id, status="parsing", progress=5, message="正在解析链接…")
+        result = extractor(
+            url,
+            api_key=api_key,
+            show_progress=False,
+            on_progress=on_progress,
+            use_cache=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        _update_extract_task(task_id, status="failed", error=str(e), message="转写失败")
+        return
+
+    video_info = result.get("video_info") or {}
+    video_id = video_info.get("video_id")
+    title = video_info.get("title")
+    text = (result.get("text") or "").strip()
+    _update_extract_task(
+        task_id,
+        video_id=video_id,
+        title=title,
+        transcript=text,
+        cached_video=bool(result.get("cached_video")),
+        cached_transcript=bool(result.get("cached_transcript")),
+    )
+
+    if not text:
+        _update_extract_task(task_id, status="failed", error="转写结果为空", message="未能识别到文案")
+        return
+
+    _update_extract_task(task_id, status="structuring", progress=82, message="正在 AI 整理知识…")
+    try:
+        card = structure.structure_text_single(text, llm, hint_title=title or "")
+    except (StructureError, LLMError) as e:
+        _update_extract_task(task_id, status="failed", error=f"AI 整理失败: {e}", message="AI 整理失败")
+        return
+
+    preview = {
+        "title": card.get("title") or title or "",
+        "content": card.get("raw_text") or text,
+        "transcript": text,
+        "video_id": video_id,
+        "source_url": url,
+        "video_title": title,
+        "download_url": video_info.get("url"),
+    }
+    _update_extract_task(
+        task_id,
+        status="done",
+        progress=100,
+        message="整理完成，请确认后入库",
+        preview=preview,
+    )
+
+
+# 保留同步接口供测试/脚本兼容（无进度）
+@app.post("/api/video/extract-sync", response_model=ExtractResponse)
+async def extract_transcript_sync(req: VideoRequest):
+    """同步提取视频文案（兼容旧调用，无进度条）。"""
+    api_key = req.api_key or os.getenv("API_KEY", "")
+    if not api_key:
+        return ExtractResponse(success=False, error="请先配置 API Key")
     try:
         result = extract_text(req.url, api_key=api_key, show_progress=False)
         return ExtractResponse(
@@ -203,7 +338,7 @@ async def extract_transcript(req: VideoRequest):
             video_id=result["video_info"]["video_id"],
             title=result["video_info"]["title"],
             text=result["text"],
-            download_url=result["video_info"]["url"]
+            download_url=result["video_info"]["url"],
         )
     except Exception as e:
         return ExtractResponse(success=False, error=str(e))
@@ -255,10 +390,55 @@ async def download_video(url: str, filename: str = "video.mp4"):
 
 
 class CardFromTextRequest(BaseModel):
-    """文本录入请求。"""
+    """文本录入请求（手动粘贴，AI 整理后入库）。"""
     text: str
-    stage: Optional[str] = None
-    api_key: str = ""  # 可选，未传则用环境变量 LLM_API_KEY / API_KEY
+    api_key: str = ""
+
+
+class CardSaveRequest(BaseModel):
+    """直接保存知识卡片（转写预览确认后，不再调 AI）。"""
+    title: str
+    content: str
+    video_id: Optional[str] = None
+    source_url: Optional[str] = None
+    transcript: Optional[str] = None  # 原始转写，写入 structured_json 备查
+
+
+@app.post("/api/cards/save")
+async def save_card(req: CardSaveRequest, conn=Depends(get_db)):
+    """保存单条知识卡片（每次视频/一次录入对应一条）。"""
+    title = (req.title or "").strip()
+    content = (req.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="内容不能为空")
+
+    video_id = (req.video_id or "").strip() or None
+    if video_id:
+        existing = db.get_card_by_video_id(conn, video_id)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="该视频已入库，可在知识库中编辑或先删除旧记录",
+            )
+
+    structured = {"title": title, "content": content}
+    if req.transcript:
+        structured["transcript"] = req.transcript.strip()
+
+    try:
+        card_id = db.insert_card(
+            conn,
+            title=title or None,
+            raw_text=content,
+            structured_json=json.dumps(structured, ensure_ascii=False),
+            source_type="douyin_link" if video_id else "manual",
+            source_url=req.source_url,
+            video_id=video_id,
+        )
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="该视频已入库")
+
+    return {"success": True, "card": _serialize_card(db.get_card(conn, card_id))}
 
 
 @app.post("/api/cards/from-text")
@@ -266,31 +446,28 @@ async def create_cards_from_text(
     req: CardFromTextRequest,
     conn=Depends(get_db),
 ):
-    """粘贴文案 -> AI 结构化 -> 入库（可生成多张卡片）。"""
+    """手动粘贴文案 -> AI 整理为单条知识 -> 入库。"""
     text = (req.text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="文案内容不能为空")
 
     llm = resolve_llm_client(req.api_key)
     try:
-        cards = structure.structure_text(text, llm)
+        card = structure.structure_text_single(text, llm)
     except StructureError as e:
-        raise HTTPException(status_code=502, detail=f"AI 结构化失败: {e}")
+        raise HTTPException(status_code=502, detail=f"AI 整理失败: {e}")
     except LLMError as e:
         raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
 
-    created = []
-    for card in cards:
-        card_id = db.insert_card(
-            conn,
-            title=card["title"],
-            raw_text=card["raw_text"],
-            structured_json=card["structured_json"],
-            source_type="manual",
-        )
-        created.append(_serialize_card(db.get_card(conn, card_id)))
-
-    return {"success": True, "cards": created}
+    card_id = db.insert_card(
+        conn,
+        title=card["title"],
+        raw_text=card["raw_text"],
+        structured_json=card["structured_json"],
+        source_type="manual",
+    )
+    saved = _serialize_card(db.get_card(conn, card_id))
+    return {"success": True, "cards": [saved], "card": saved}
 
 
 # ---------------------------------------------------------------------------
@@ -300,15 +477,20 @@ async def create_cards_from_text(
 # 进度阶段：machine status -> 中文展示标签
 _TASK_PHASES = {
     "pending": "排队中",
+    "parsing": "解析链接",
+    "downloading": "下载视频",
+    "extracting_audio": "提取音频",
+    "transcribing": "语音识别",
+    "structuring": "AI 整理",
     "extracting": "解析转写中",
-    "structuring": "结构化中",
     "done": "已完成",
     "duplicate": "已存在",
     "failed": "失败",
 }
 
-# 录入任务注册表（自用单机场景，内存态即可）
+# 任务注册表（自用单机场景，内存态即可）
 _tasks: dict[str, dict] = {}
+_extract_tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
 
 
@@ -363,7 +545,12 @@ def _run_import_task(
         # 1) 解析 + 下载 + 转写（extract_text 是一体的黑盒步骤）
         _update_task(task_id, status="extracting", progress=20, message="正在解析并转写视频")
         try:
-            result = extractor(url, api_key=api_key, show_progress=False)
+            def _on_progress(phase, progress, message):
+                _update_task(task_id, status=phase, progress=progress, message=message)
+
+            result = extractor(
+                url, api_key=api_key, show_progress=False, on_progress=_on_progress, use_cache=True
+            )
         except Exception as e:  # 网络/解析/转写失败统一兜底
             _update_task(task_id, status="failed", error=f"解析或转写失败: {e}", message="解析或转写失败")
             return
@@ -392,40 +579,40 @@ def _run_import_task(
                 )
                 return
 
-        # 3) AI 结构化
-        _update_task(task_id, status="structuring", progress=70, message="正在 AI 结构化")
+        # 3) AI 整理为单条知识
+        _update_task(task_id, status="structuring", progress=70, message="正在 AI 整理")
         try:
-            cards = structure.structure_text(text, llm)
+            card = structure.structure_text_single(text, llm, hint_title=title or "")
         except (StructureError, LLMError) as e:
-            _update_task(task_id, status="failed", error=f"AI 结构化失败: {e}", message="AI 结构化失败")
+            _update_task(task_id, status="failed", error=f"AI 整理失败: {e}", message="AI 整理失败")
             return
 
-        # 4) 入库（video_id 唯一，多卡时只第一张携带 video_id）
-        created = []
-        for i, card in enumerate(cards):
-            try:
-                card_id = db.insert_card(
-                    conn,
-                    title=card["title"],
-                    raw_text=card["raw_text"],
-                    structured_json=card["structured_json"],
-                    source_type="douyin_link",
-                    source_url=url,
-                    video_id=video_id if i == 0 else None,
-                )
-            except sqlite3.IntegrityError:
-                # 并发下被其他任务抢先写入同一 video_id
-                existing = db.get_card_by_video_id(conn, video_id) if video_id else None
-                _update_task(
-                    task_id,
-                    status="duplicate",
-                    progress=100,
-                    duplicate=True,
-                    message="该视频已入库，未重复创建",
-                    cards=[_serialize_card(existing)] if existing else [],
-                )
-                return
-            created.append(_serialize_card(db.get_card(conn, card_id)))
+        # 4) 入库（每个视频一条）
+        try:
+            card_id = db.insert_card(
+                conn,
+                title=card["title"],
+                raw_text=card["raw_text"],
+                structured_json=json.dumps(
+                    {"title": card["title"], "content": card["raw_text"], "transcript": text},
+                    ensure_ascii=False,
+                ),
+                source_type="douyin_link",
+                source_url=url,
+                video_id=video_id,
+            )
+        except sqlite3.IntegrityError:
+            existing = db.get_card_by_video_id(conn, video_id) if video_id else None
+            _update_task(
+                task_id,
+                status="duplicate",
+                progress=100,
+                duplicate=True,
+                message="该视频已入库，未重复创建",
+                cards=[_serialize_card(existing)] if existing else [],
+            )
+            return
+        created = [_serialize_card(db.get_card(conn, card_id))]
 
         _update_task(task_id, status="done", progress=100, message="入库完成", cards=created)
     except Exception as e:  # noqa: BLE001 兜底：后台任务绝不应静默卡死

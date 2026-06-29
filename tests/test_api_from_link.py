@@ -191,8 +191,8 @@ def test_task_not_found_returns_404(env):
     assert resp.status_code == 404
 
 
-def test_from_link_multi_cards_only_first_keeps_video_id(env):
-    """一段文案拆成多张卡片时，video_id 唯一约束下只第一张带 video_id。"""
+def test_from_link_multi_cards_merged_to_one(env):
+    """即使 LLM 返回多条，也只入库一张卡片。"""
     client, conn, _, _ = env
     multi = [
         {"title": "瓦工细节A", "content": "细节 A 正文"},
@@ -205,8 +205,7 @@ def test_from_link_multi_cards_only_first_keeps_video_id(env):
     task = _wait_task(client, task_id)
 
     assert task["status"] == "done"
-    assert len(task["cards"]) == 2
-    video_ids = sorted([c["video_id"] or "" for c in task["cards"]])
-    assert video_ids == ["", "vid_abc123"]
-    # 两张都标记来源为抖音链接
-    assert all(c["source_type"] == "douyin_link" for c in task["cards"])
+    assert len(task["cards"]) == 1
+    assert task["cards"][0]["video_id"] == "vid_abc123"
+    assert "细节 A" in task["cards"][0]["raw_text"]
+    assert db.list_cards(conn) and len(db.list_cards(conn)) == 1

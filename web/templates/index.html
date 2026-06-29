@@ -158,11 +158,15 @@
                     <div x-show="!apiKeyConfigured" @click="showSettings=true" class="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl cursor-pointer text-xs text-amber-800">链接转写与 AI 结构化需要 API Key，点击此处配置。</div>
                 </div>
 
-                <div x-show="loading" class="bg-white rounded-2xl shadow-card p-6">
-                    <div class="flex items-center gap-4">
-                        <div class="relative w-10 h-10"><div class="absolute inset-0 rounded-full border-4 border-douyin-gray-100"></div><div class="absolute inset-0 rounded-full border-4 border-douyin-red border-t-transparent animate-spin-slow"></div></div>
-                        <p class="font-medium text-douyin-gray-900" x-text="loadingText"></p>
+                <div x-show="loading" class="bg-white rounded-2xl shadow-card p-6 space-y-3">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="font-medium text-douyin-gray-900" x-text="loadingText"></span>
+                        <span class="text-douyin-gray-400" x-text="loadingProgress + '%'"></span>
                     </div>
+                    <div class="h-2 bg-douyin-gray-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-douyin transition-all duration-500 ease-out rounded-full" :style="'width:' + loadingProgress + '%'"></div>
+                    </div>
+                    <p class="text-xs text-douyin-gray-500" x-text="loadingMessage"></p>
                 </div>
 
                 <div x-show="collectError" class="bg-red-50 border border-red-100 rounded-2xl p-5 text-sm text-red-700" x-text="collectError" style="display:none"></div>
@@ -170,7 +174,8 @@
                 <div x-show="videoInfo" class="bg-white rounded-2xl shadow-card p-6">
                     <p class="text-xs text-douyin-gray-400 mb-1">视频信息</p>
                     <h3 class="font-medium text-douyin-gray-900 mb-3" x-text="videoInfo?.title"></h3>
-                    <p class="text-xs font-mono text-douyin-gray-500 mb-3" x-text="'ID: ' + (videoInfo?.video_id||'')"></p>
+                    <p class="text-xs font-mono text-douyin-gray-500 mb-1" x-text="'ID: ' + (videoInfo?.video_id||'')"></p>
+                    <p x-show="videoInfo?.cache_hint" class="text-xs text-green-600 mb-3" x-text="videoInfo?.cache_hint"></p>
                     <a x-show="videoInfo?.download_url" :href="`/api/video/download?url=${encodeURIComponent(videoInfo?.download_url)}&filename=${encodeURIComponent(videoInfo?.video_id||'video')}.mp4`"
                        class="inline-flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg hover:bg-green-100">下载无水印视频</a>
                 </div>
@@ -180,17 +185,29 @@
                 <div class="bg-white rounded-2xl shadow-card overflow-hidden flex flex-col min-h-[360px]">
                     <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between flex-wrap gap-2">
                         <div>
-                            <span class="font-semibold text-douyin-gray-900">知识内容</span>
-                            <p class="text-xs text-douyin-gray-400 mt-0.5">可编辑、可粘贴，确认后入库</p>
+                            <span class="font-semibold text-douyin-gray-900">知识预览</span>
+                            <p class="text-xs text-douyin-gray-400 mt-0.5">转写后自动整理，可编辑确认后入库</p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button @click="copyCollectText" :disabled="!collectText.trim()" class="h-9 px-3 bg-douyin-gray-100 hover:bg-douyin-gray-200 rounded-lg text-sm text-douyin-gray-700 disabled:opacity-50">复制</button>
-                            <button @click="addToKnowledge" :disabled="!collectText.trim() || kbBusy || !apiKeyConfigured" class="h-9 px-3 bg-gradient-douyin hover:opacity-90 rounded-lg text-sm text-white disabled:opacity-50">入库</button>
+                            <button @click="copyPreviewContent" :disabled="!previewContent.trim()" class="h-9 px-3 bg-douyin-gray-100 hover:bg-douyin-gray-200 rounded-lg text-sm text-douyin-gray-700 disabled:opacity-50">复制</button>
+                            <button @click="addToKnowledge" :disabled="!previewContent.trim() || kbBusy || !apiKeyConfigured" class="h-9 px-3 bg-gradient-douyin hover:opacity-90 rounded-lg text-sm text-white disabled:opacity-50">入库</button>
                         </div>
                     </div>
-                    <div class="p-4 flex-1 flex flex-col">
-                        <textarea x-model="collectText" rows="16" placeholder="在此粘贴或输入装修知识文案；链接转写后会自动填入，也可直接编辑修正"
-                                  class="w-full flex-1 min-h-[280px] px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring text-douyin-gray-700 leading-relaxed"></textarea>
+                    <div class="p-4 flex-1 flex flex-col space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-douyin-gray-500 mb-1">标题</label>
+                            <input x-model="previewTitle" placeholder="知识标题"
+                                   class="w-full px-4 py-2.5 text-sm border border-douyin-gray-200 rounded-xl focus-ring">
+                        </div>
+                        <div class="flex-1 flex flex-col min-h-[200px]">
+                            <label class="block text-xs font-medium text-douyin-gray-500 mb-1">内容</label>
+                            <textarea x-model="previewContent" rows="12" placeholder="在此粘贴装修知识；链接转写后会自动填入整理结果"
+                                      class="w-full flex-1 min-h-[200px] px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring text-douyin-gray-700 leading-relaxed"></textarea>
+                        </div>
+                        <details x-show="transcript" class="text-xs">
+                            <summary class="cursor-pointer text-douyin-gray-500 hover:text-douyin-gray-700">查看原始转写</summary>
+                            <pre class="mt-2 p-3 bg-douyin-gray-50 rounded-lg text-douyin-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto" x-text="transcript"></pre>
+                        </details>
                     </div>
                 </div>
             </div>
@@ -304,9 +321,10 @@
                 showSettings: false, showApiKey: false,
                 apiKey: '', apiKeyInput: '', serverApiKeyConfigured: false,
                 // 知识收集
-                url:'', collectText:'',
-                loading:false, loadingText:'', collectError:'', videoInfo:null,
-                kbBusy:false,
+                url:'', previewTitle:'', previewContent:'', transcript:'',
+                videoId:null, sourceUrl:'', structuredReady:false,
+                loading:false, loadingText:'', loadingMessage:'', loadingProgress:0,
+                collectError:'', videoInfo:null, kbBusy:false,
                 // 知识库
                 cards:[], cardsLoading:false, kbLoaded:false, kbError:'',
                 showEdit:false, editCard:null,
@@ -333,22 +351,81 @@
                 async transcribeLink(){
                     if(!this.url.trim()||this.loading) return;
                     if(!this.apiKeyConfigured){ this.showSettings=true; return; }
-                    this.collectError=''; this.loading=true; this.loadingText='正在下载并转写视频（约 20~60s）…';
-                    try{ const r=await fetch('/api/video/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,api_key:this.apiKey})}); const d=await r.json();
-                        if(d.success){ this.videoInfo={video_id:d.video_id,title:d.title,download_url:d.download_url}; this.collectText=d.text; this.showToast('转写完成，请检查右侧内容'); }
-                        else { this.collectError=d.error||'转写失败'; } }
-                    catch(e){ this.collectError='网络错误'; } finally{ this.loading=false; }
+                    this.collectError=''; this.structuredReady=false; this.transcript='';
+                    this.previewTitle=''; this.previewContent=''; this.videoId=null; this.sourceUrl='';
+                    this.loading=true; this.loadingProgress=0;
+                    this.loadingText='转写中'; this.loadingMessage='已提交任务…';
+                    try{
+                        const r=await fetch('/api/video/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,api_key:this.apiKey})});
+                        const d=await r.json();
+                        if(!r.ok||!d.success){ this.collectError=d.detail||'提交失败'; this.loading=false; return; }
+                        this.pollExtractTask(d.task_id);
+                    }catch(e){ this.collectError='网络错误'; this.loading=false; }
                 },
-                async copyCollectText(){ try{ await navigator.clipboard.writeText(this.collectText); this.showToast('已复制'); }catch(e){ this.showToast('复制失败'); } },
+                pollExtractTask(taskId){
+                    const tick=async()=>{
+                        try{
+                            const r=await fetch('/api/video/extract/task/'+taskId);
+                            const d=await r.json();
+                            const t=d.task;
+                            if(!t){ this.collectError='任务不存在'; this.loading=false; return; }
+                            this.loadingProgress=t.progress||0;
+                            this.loadingText=t.phase||'处理中';
+                            this.loadingMessage=t.message||'';
+                            if(t.status==='failed'){
+                                this.collectError=t.error||'转写失败';
+                                this.loading=false; return;
+                            }
+                            if(t.status==='done'){
+                                this.loading=false;
+                                const p=t.preview||{};
+                                this.previewTitle=p.title||'';
+                                this.previewContent=p.content||'';
+                                this.transcript=p.transcript||'';
+                                this.videoId=p.video_id||null;
+                                this.sourceUrl=p.source_url||this.url;
+                                this.structuredReady=true;
+                                const hints=[];
+                                if(t.cached_video) hints.push('视频已缓存');
+                                if(t.cached_transcript) hints.push('转写已缓存');
+                                this.videoInfo={
+                                    video_id:p.video_id,
+                                    title:p.video_title,
+                                    download_url:p.download_url,
+                                    cache_hint:hints.length?('⚡ '+hints.join(' · ')):''
+                                };
+                                this.showToast('整理完成，请确认后入库');
+                                return;
+                            }
+                        }catch(e){}
+                        setTimeout(tick,1000);
+                    };
+                    tick();
+                },
+                async copyPreviewContent(){ try{ await navigator.clipboard.writeText(this.previewContent); this.showToast('已复制'); }catch(e){ this.showToast('复制失败'); } },
                 async addToKnowledge(){
-                    const text = (this.collectText||'').trim();
-                    if(!text || this.kbBusy) return;
+                    const content=(this.previewContent||'').trim();
+                    if(!content||this.kbBusy) return;
                     if(!this.apiKeyConfigured){ this.showSettings=true; return; }
                     this.kbBusy=true; this.collectError='';
-                    try{ const r=await fetch('/api/cards/from-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,api_key:this.apiKey})}); const d=await r.json();
-                        if(r.ok&&d.success){ this.showToast(`已入库（${d.cards.length} 张卡片）`); this.kbLoaded=false; }
-                        else { this.collectError=d.detail||'入库失败'; } }
-                    catch(e){ this.collectError='网络错误'; } finally{ this.kbBusy=false; }
+                    try{
+                        let r, d;
+                        if(this.structuredReady && this.videoId){
+                            r=await fetch('/api/cards/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+                                title:this.previewTitle, content, video_id:this.videoId,
+                                source_url:this.sourceUrl, transcript:this.transcript, api_key:this.apiKey
+                            })});
+                        } else {
+                            r=await fetch('/api/cards/from-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:content,api_key:this.apiKey})});
+                        }
+                        d=await r.json();
+                        if(r.ok&&d.success){
+                            this.showToast('已入库');
+                            this.kbLoaded=false;
+                            this.structuredReady=false;
+                            this.videoId=null;
+                        } else { this.collectError=d.detail||'入库失败'; }
+                    }catch(e){ this.collectError='网络错误'; } finally{ this.kbBusy=false; }
                 },
 
                 // ---------- 知识库 ----------
