@@ -93,7 +93,7 @@
 
 ### 任务 8 · 前端三 Tab + PWA ✅
 - 文件：`web/templates/index.html`（Tailwind CDN + Alpine.js，零构建）、`web/static/`
-  （`manifest.webmanifest`、`icon.svg`）、`web/app.py`（`/sw.js` Service Worker 路由 + `/static` 挂载）。
+  （`manifest.webmanifest`、`icon.png`、`icon.svg`）、`web/app.py`（`/sw.js` Service Worker 路由 + `/static` 挂载）。
 - 三 Tab：
   - **提取**：复用原抖音「获取信息 / 提取文案」，提取结果可一键「加入知识库」。
   - **知识库**：链接 / 文本两种录入；链接录入实时显示异步任务进度（解析转写中 / 结构化中 / 已完成 /
