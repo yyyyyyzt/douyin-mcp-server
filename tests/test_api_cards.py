@@ -32,9 +32,8 @@ def client(tmp_path):
     fake = FakeLLM([
         _card_payload([
             {
-                "stage": "水电改造",
                 "title": "冷热水管走顶规范",
-                "steps": [{"order": 1, "action": "弹线定位", "detail": "用水平仪", "standard": "误差≤2mm", "warning": "避开承重墙"}],
+                "content": "冷热水管走顶，弹线定位，误差≤2mm，避开承重墙。",
             }
         ])
     ])
@@ -61,7 +60,6 @@ def test_from_text_creates_card(client):
     card = data["cards"][0]
     assert card["title"] == "冷热水管走顶规范"
     assert card["id"] > 0
-    # 已持久化
     assert db.get_card(conn, card["id"]) is not None
 
 
@@ -89,7 +87,7 @@ def test_get_card_detail(client):
     assert resp.status_code == 200
     detail = resp.json()["card"]
     assert detail["id"] == card_id
-    assert detail["steps"][0]["action"] == "弹线定位"  # structured_json 已解析
+    assert detail["title"] == "冷热水管走顶规范"
 
 
 def test_get_missing_card_returns_404(client):

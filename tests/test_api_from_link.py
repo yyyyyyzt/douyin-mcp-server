@@ -29,17 +29,8 @@ def _card_payload(cards):
 
 SAMPLE_CARDS = [
     {
-        "stage": "泥木阶段",
         "title": "瓦工施工 12 个细节",
-        "steps": [
-            {
-                "order": 1,
-                "action": "墙面基层处理",
-                "detail": "贴砖前充分湿润墙面",
-                "standard": "基层无空鼓、无浮灰",
-                "warning": "避免直接在腻子层贴砖",
-            }
-        ],
+        "content": "贴砖前充分湿润墙面，基层无空鼓、无浮灰，避免直接在腻子层贴砖。",
     }
 ]
 
@@ -130,10 +121,9 @@ def test_from_link_dedup_blocks_reimport(env):
     # 预先插入同 video_id 的卡片
     db.insert_card(
         conn,
-        stage="泥木阶段",
         title="已存在的瓦工卡片",
         raw_text="旧文案",
-        structured_json=json.dumps({"stage": "泥木阶段", "title": "已存在的瓦工卡片", "steps": []}),
+        structured_json=json.dumps({"title": "已存在的瓦工卡片", "content": "旧文案"}, ensure_ascii=False),
         source_type="douyin_link",
         source_url="https://v.douyin.com/old/",
         video_id="vid_abc123",
@@ -205,8 +195,8 @@ def test_from_link_multi_cards_only_first_keeps_video_id(env):
     """一段文案拆成多张卡片时，video_id 唯一约束下只第一张带 video_id。"""
     client, conn, _, _ = env
     multi = [
-        {"stage": "泥木阶段", "title": "瓦工细节A", "steps": []},
-        {"stage": "防水阶段", "title": "防水细节B", "steps": []},
+        {"title": "瓦工细节A", "content": "细节 A 正文"},
+        {"title": "防水细节B", "content": "细节 B 正文"},
     ]
     webapp.resolve_llm_client = lambda api_key="": FakeLLM([_card_payload(multi)])
 

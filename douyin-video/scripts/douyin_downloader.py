@@ -64,7 +64,8 @@ HEADERS = {
 
 # 硅基流动 API 配置
 DEFAULT_API_BASE_URL = "https://api.siliconflow.cn/v1/audio/transcriptions"
-DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
+DEFAULT_ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
+DEFAULT_MODEL = DEFAULT_ASR_MODEL  # 向后兼容旧引用
 
 
 class DouyinProcessor:
@@ -73,7 +74,7 @@ class DouyinProcessor:
     def __init__(self, api_key: str = "", api_base_url: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key
         self.api_base_url = api_base_url or DEFAULT_API_BASE_URL
-        self.model = model or DEFAULT_MODEL
+        self.model = model or os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
         self.temp_dir = Path(tempfile.mkdtemp())
 
     def __del__(self):
@@ -341,7 +342,8 @@ def download_video(share_link: str, output_dir: str = ".") -> Path:
 
 
 def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Optional[str] = None,
-                 save_video: bool = False, show_progress: bool = True) -> dict:
+                 save_video: bool = False, show_progress: bool = True,
+                 asr_model: Optional[str] = None) -> dict:
     """
     从视频中提取文案并保存到文件
 
@@ -352,7 +354,8 @@ def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Opt
     if not api_key:
         raise ValueError("未设置环境变量 API_KEY，请先获取硅基流动 API 密钥")
 
-    processor = DouyinProcessor(api_key)
+    asr_model = asr_model or os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
+    processor = DouyinProcessor(api_key, model=asr_model)
 
     if show_progress:
         print("正在解析抖音分享链接...")

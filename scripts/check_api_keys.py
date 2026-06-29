@@ -7,7 +7,7 @@
   （ffmpeg 不可用时退化为「鉴权探针」，仅根据状态码判断 Key 是否有效）。
 
 用法：
-    # 复用环境变量（API_KEY / LLM_API_KEY / LLM_BASE_URL / LLM_MODEL）
+    # 复用环境变量（API_KEY / LLM_API_KEY / LLM_BASE_URL / LLM_MODEL / ASR_MODEL）
     python scripts/check_api_keys.py
 
     # 只测其中一项
@@ -32,7 +32,7 @@ import requests
 
 # 默认配置（与项目保持一致：硅基流动同时提供 LLM 与 ASR）
 DEFAULT_LLM_BASE_URL = "https://api.siliconflow.cn/v1"
-DEFAULT_LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+DEFAULT_LLM_MODEL = "Qwen/Qwen3-8B"
 DEFAULT_ASR_URL = "https://api.siliconflow.cn/v1/audio/transcriptions"
 DEFAULT_ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
 

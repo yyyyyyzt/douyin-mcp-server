@@ -15,7 +15,7 @@ import requests
 
 # 默认指向硅基流动（与本仓库语音识别同一平台，可只配一个 key）
 DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
-DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+DEFAULT_MODEL = "Qwen/Qwen3-8B"
 DEFAULT_TIMEOUT = 60
 DEFAULT_MAX_RETRIES = 3
 

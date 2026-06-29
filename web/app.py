@@ -125,16 +125,8 @@ def get_extractor() -> Callable:
 
 
 def _serialize_card(row: dict) -> dict:
-    """把数据库行转为 API 卡片：附带解析后的 steps。"""
-    card = dict(row)
-    steps = []
-    if card.get("structured_json"):
-        try:
-            steps = json.loads(card["structured_json"]).get("steps", [])
-        except (json.JSONDecodeError, AttributeError):
-            steps = []
-    card["steps"] = steps
-    return card
+    """把数据库行转为 API 卡片。"""
+    return dict(row)
 
 
 class VideoRequest(BaseModel):
@@ -289,10 +281,8 @@ async def create_cards_from_text(
 
     created = []
     for card in cards:
-        stage = req.stage or card["stage"]
         card_id = db.insert_card(
             conn,
-            stage=stage,
             title=card["title"],
             raw_text=card["raw_text"],
             structured_json=card["structured_json"],
@@ -413,11 +403,9 @@ def _run_import_task(
         # 4) 入库（video_id 唯一，多卡时只第一张携带 video_id）
         created = []
         for i, card in enumerate(cards):
-            card_stage = stage or card["stage"]
             try:
                 card_id = db.insert_card(
                     conn,
-                    stage=card_stage,
                     title=card["title"],
                     raw_text=card["raw_text"],
                     structured_json=card["structured_json"],
@@ -502,16 +490,14 @@ async def get_card_detail(card_id: int, conn=Depends(get_db)):
 
 
 class CardUpdateRequest(BaseModel):
-    """卡片编辑请求：仅文本字段，均为可选（按需局部更新）。"""
-    stage: Optional[str] = None
+    """卡片编辑请求：仅标题与正文。"""
     title: Optional[str] = None
     raw_text: Optional[str] = None
-    steps: Optional[list] = None
 
 
 @app.put("/api/cards/{card_id}")
 async def update_card_endpoint(card_id: int, req: CardUpdateRequest, conn=Depends(get_db)):
-    """编辑卡片文本字段（stage/title/raw_text/steps），不重新调 AI，同步重写 structured_json。"""
+    """编辑卡片标题与正文，不重新调 AI，同步重写 structured_json。"""
     provided = req.model_dump(exclude_unset=True)
     if not provided:
         raise HTTPException(status_code=400, detail="未提供任何可更新字段")
@@ -521,39 +507,20 @@ async def update_card_endpoint(card_id: int, req: CardUpdateRequest, conn=Depend
         raise HTTPException(status_code=404, detail="卡片不存在")
     card = dict(row)
 
-    # 现有结构化内容（steps 取自 structured_json，stage/title 以主表列为准）
-    current_steps = []
-    if card.get("structured_json"):
-        try:
-            current_steps = json.loads(card["structured_json"]).get("steps", []) or []
-        except (json.JSONDecodeError, AttributeError):
-            current_steps = []
-
-    new_stage = provided.get("stage", card.get("stage")) if "stage" in provided else card.get("stage")
     new_title = provided.get("title", card.get("title")) if "title" in provided else card.get("title")
-
-    if "steps" in provided:
-        steps_in = provided["steps"]
-        if steps_in is None:
-            steps_in = []
-        if not isinstance(steps_in, list):
-            raise HTTPException(status_code=400, detail="steps 必须是数组")
-        new_steps = [structure._normalize_step(s, i) for i, s in enumerate(steps_in)]
-    else:
-        new_steps = current_steps
-
-    fields = {
-        "stage": new_stage,
-        "title": new_title,
-        "structured_json": json.dumps(
-            {"stage": new_stage, "title": new_title, "steps": new_steps}, ensure_ascii=False
-        ),
-    }
-
+    new_raw = card.get("raw_text")
     if "raw_text" in provided:
         new_raw = (provided["raw_text"] or "").strip()
         if not new_raw:
-            raise HTTPException(status_code=400, detail="原文不能为空")
+            raise HTTPException(status_code=400, detail="内容不能为空")
+
+    fields = {
+        "title": new_title,
+        "structured_json": json.dumps(
+            {"title": new_title, "content": new_raw}, ensure_ascii=False
+        ),
+    }
+    if "raw_text" in provided:
         fields["raw_text"] = new_raw
 
     db.update_card(conn, card_id, **fields)
