@@ -212,7 +212,7 @@ async def extract_transcript_async(
     req: VideoRequest,
     extractor: Callable = Depends(get_extractor),
 ):
-    """异步转写抖音视频：解析 → 下载(可缓存) → 转写 → AI 整理，返回 task_id 供轮询。"""
+    """异步转写抖音视频：解析 → 下载(视频可缓存) → 转写(每次执行) → AI 整理，返回 task_id 供轮询。"""
     settings = get_settings()
     if not settings.api_configured:
         raise HTTPException(status_code=503, detail="服务端未配置 API Key，请在 .env 中设置 API_KEY")
@@ -259,7 +259,7 @@ def _new_extract_task(url: str) -> str:
             "transcript": "",
             "preview": None,
             "cached_video": False,
-            "cached_transcript": False,
+            "cached_transcript": False,  # 转写不缓存，便于切换 ASR 模型
         }
     return task_id
 
@@ -318,7 +318,7 @@ def _run_extract_task(
         title=title,
         transcript=text,
         cached_video=bool(result.get("cached_video")),
-        cached_transcript=bool(result.get("cached_transcript")),
+        cached_transcript=False,
     )
 
     if not text:

@@ -2,6 +2,7 @@
 
 import json
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,7 +27,6 @@ FAKE_RESULT = {
     },
     "text": "这是转写得到的原始文案内容。",
     "cached_video": False,
-    "cached_transcript": False,
 }
 
 
@@ -77,6 +77,7 @@ def test_extract_task_returns_preview(extract_env):
     assert task["preview"]["title"] == "测试标题"
     assert task["preview"]["video_id"] == "vid_cache_test"
     assert task["preview"]["transcript"] == FAKE_RESULT["text"]
+    assert task["cached_transcript"] is False
 
 
 def test_save_card_with_video_id(extract_env):
@@ -103,6 +104,49 @@ def test_save_card_with_video_id(extract_env):
     assert dup.status_code == 409
 
 
+def test_video_cache_hit_skips_download(tmp_path, monkeypatch):
+    """视频命中缓存时跳过下载，但转写仍每次执行。"""
+    import douyin_downloader as dd
+
+    cache = tmp_path / "cache"
+    cache.mkdir(parents=True)
+    monkeypatch.setenv("VIDEO_CACHE_DIR", str(cache))
+    monkeypatch.setenv("API_KEY", "sk-test")
+
+    vid = "vid_no_transcript_cache"
+    (cache / f"{vid}.mp4").write_bytes(b"x" * 2048)
+    # 遗留的转写缓存文件（应被忽略）
+    (cache / f"{vid}.transcript.txt").write_text("旧缓存转写", encoding="utf-8")
+
+    transcribe_calls = []
+
+    class FakeProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def parse_share_url(self, link):
+            return {"video_id": vid, "title": "测试", "url": "http://example.com/v.mp4"}
+
+        def extract_audio(self, path, show_progress=True):
+            return Path("/tmp/fake.wav")
+
+        def extract_text_from_audio(self, path, show_progress=True):
+            transcribe_calls.append(1)
+            return "新 ASR 转写结果"
+
+        def cleanup_files(self, *paths):
+            pass
+
+    monkeypatch.setattr(dd, "DouyinProcessor", FakeProcessor)
+
+    result = dd.extract_text("https://v.douyin.com/fake/", show_progress=False)
+
+    assert result["cached_video"] is True
+    assert result["text"] == "新 ASR 转写结果"
+    assert len(transcribe_calls) == 1
+    assert "cached_transcript" not in result
+
+
 def test_video_cache_helpers(tmp_path, monkeypatch):
     import douyin_downloader as dd
 
@@ -114,6 +158,3 @@ def test_video_cache_helpers(tmp_path, monkeypatch):
     video_file = cache / f"{vid}.mp4"
     video_file.write_bytes(b"x" * 2048)
     assert dd.get_cached_video_path(vid) == video_file
-
-    dd.save_transcript_cache(vid, "转写文本")
-    assert dd.get_cached_transcript_path(vid).read_text(encoding="utf-8") == "转写文本"

@@ -92,7 +92,7 @@ def _resolve_asr_model(explicit: Optional[str] = None) -> str:
 
 
 def get_video_cache_dir() -> Path:
-    """视频与转写缓存目录（可用 VIDEO_CACHE_DIR 覆盖）。"""
+    """视频缓存目录（可用 VIDEO_CACHE_DIR 覆盖）。转写结果不缓存，便于切换 ASR 模型重试。"""
     env = os.getenv("VIDEO_CACHE_DIR")
     if env:
         cache = Path(env)
@@ -110,24 +110,6 @@ def get_cached_video_path(video_id: str) -> Optional[Path]:
     if path.exists() and path.stat().st_size > 1024:
         return path
     return None
-
-
-def get_cached_transcript_path(video_id: str) -> Optional[Path]:
-    """按 video_id 查找已缓存的转写文本。"""
-    if not video_id:
-        return None
-    path = get_video_cache_dir() / f"{video_id}.transcript.txt"
-    if path.exists() and path.stat().st_size > 0:
-        return path
-    return None
-
-
-def save_transcript_cache(video_id: str, text: str) -> None:
-    """缓存转写结果，避免同一视频重复调用 ASR。"""
-    if not video_id or not text:
-        return
-    path = get_video_cache_dir() / f"{video_id}.transcript.txt"
-    path.write_text(text, encoding="utf-8")
 
 
 class DouyinProcessor:
@@ -426,7 +408,7 @@ def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Opt
     从视频中提取文案并保存到文件
 
     返回:
-        dict: 包含 video_info, text, output_path, cached_video, cached_transcript
+        dict: 包含 video_info, text, output_path, cached_video（转写每次重新执行，不缓存）
     """
     def report(phase: str, progress: int, message: str) -> None:
         if on_progress:
@@ -446,20 +428,6 @@ def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Opt
     video_info = processor.parse_share_url(share_link)
     video_id = video_info.get("video_id", "")
     cached_video = False
-    cached_transcript = False
-
-    if use_cache:
-        transcript_path = get_cached_transcript_path(video_id)
-        if transcript_path:
-            report("transcribing", 80, "使用已缓存的转写结果")
-            text_content = transcript_path.read_text(encoding="utf-8")
-            return {
-                "video_info": video_info,
-                "text": text_content,
-                "output_path": None,
-                "cached_video": bool(get_cached_video_path(video_id)),
-                "cached_transcript": True,
-            }
 
     def _download_progress(pct: int) -> None:
         # 下载阶段约占 15% ~ 40%
@@ -493,15 +461,11 @@ def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Opt
     text_content = processor.extract_text_from_audio(audio_path, show_progress=show_progress)
     report("transcribing", 75, "语音识别完成")
 
-    if use_cache and video_id:
-        save_transcript_cache(video_id, text_content)
-
     result = {
         "video_info": video_info,
         "text": text_content,
         "output_path": None,
         "cached_video": cached_video,
-        "cached_transcript": False,
     }
 
     # 保存到文件
