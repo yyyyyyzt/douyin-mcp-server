@@ -38,3 +38,23 @@ def test_to_citation_shape():
     assert len(cit["excerpt"]) <= qa.EXCERPT_LEN + 1
     assert cit["excerpt"].endswith("…")
     assert cit["score"] == 3.1416
+
+
+def test_build_messages_with_document_and_cards():
+    doc = {"filename": "报价单.xlsx", "text": "水电改造 6000 元"}
+    msgs = qa.build_messages("这份报价合理吗？", [_card()], grounded=True, document=doc)
+    assert "上传文件" in msgs[0]["content"]
+    assert "合同/报价单" in msgs[0]["content"]
+    user = msgs[1]["content"]
+    assert "报价单.xlsx" in user
+    assert "水电改造 6000" in user
+    assert "卫生间防水高度" in user
+
+
+def test_build_messages_with_document_only():
+    doc = {"filename": "合同.pdf", "text": "总价 15 万元，工期 60 天"}
+    msgs = qa.build_messages("有哪些风险？", [], grounded=False, document=doc)
+    assert "知识库中暂无" in msgs[0]["content"]
+    assert "合同.pdf" in msgs[1]["content"]
+    assert "15 万元" in msgs[1]["content"]
+    assert "片段" not in msgs[1]["content"]

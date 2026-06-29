@@ -100,6 +100,49 @@ def test_chat_empty_question_returns_400(env):
     assert resp.status_code == 400
 
 
+def test_chat_with_document_and_grounded(env):
+    client, conn, llm = env
+    cid = _seed(conn, "报价阶段", "水电改造单价", "水电改造一般按米计价，含开槽布线。")
+
+    resp = client.post(
+        "/api/chat",
+        json={
+            "question": "水电改造一般怎么计价？这份报价单合理吗？",
+            "document_text": "水电改造 120 元/米，共 50 米，合计 6000 元",
+            "document_name": "装修公司报价单.xlsx",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["has_document"] is True
+    assert data["grounded"] is True
+    assert any(c["id"] == cid for c in data["citations"])
+    user_msg = llm.last_messages[1]["content"]
+    assert "装修公司报价单.xlsx" in user_msg
+    assert "6000 元" in user_msg
+    assert "水电改造单价" in user_msg
+    assert "上传文件" in llm.last_messages[0]["content"]
+
+
+def test_chat_with_document_ungrounded(env):
+    client, conn, llm = env
+    resp = client.post(
+        "/api/chat",
+        json={
+            "question": "请审查这份报价",
+            "document_text": "瓷砖铺贴 80 元/平米",
+            "document_name": "报价.pdf",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_document"] is True
+    assert data["grounded"] is False
+    assert "知识库中暂无" in llm.last_messages[0]["content"]
+    assert "报价.pdf" in llm.last_messages[1]["content"]
+
+
 def test_chat_llm_error_returns_502(env, tmp_path):
     db_path = str(tmp_path / "chat_err.db")
     conn = db.connect(db_path)

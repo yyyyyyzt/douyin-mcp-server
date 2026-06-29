@@ -258,12 +258,24 @@
             <div class="bg-white rounded-2xl shadow-card flex flex-col" style="height: calc(100vh - 220px); min-height: 420px;">
                 <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between">
                     <span class="font-semibold text-douyin-gray-900">基于知识库问答</span>
-                    <button @click="messages=[]" x-show="messages.length" class="text-sm text-douyin-gray-500 hover:text-douyin-red">清空</button>
+                    <button @click="clearChat" x-show="messages.length || chatDocument" class="text-sm text-douyin-gray-500 hover:text-douyin-red">清空</button>
+                </div>
+
+                <!-- 已上传文件 -->
+                <div x-show="chatDocument" class="px-4 pt-3">
+                    <div class="flex items-center gap-2 p-2.5 bg-douyin-gray-50 border border-douyin-gray-100 rounded-xl text-xs">
+                        <span class="text-douyin-gray-500">📎</span>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-douyin-gray-800 truncate" x-text="chatDocument?.filename"></p>
+                            <p class="text-douyin-gray-400" x-text="(chatDocument?.char_count||0) + ' 字' + (chatDocument?.truncated ? '（已截断）' : '')"></p>
+                        </div>
+                        <button @click="removeChatDocument" class="text-douyin-gray-400 hover:text-red-500 px-1">移除</button>
+                    </div>
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-4 space-y-4" x-ref="chatBox">
-                    <div x-show="messages.length===0" class="h-full flex flex-col items-center justify-center text-center text-douyin-gray-400">
-                        <p class="text-sm max-w-xs">向你的装修知识库提问，例如「卫生间防水要刷多高？」回答会引用命中的卡片；无相关知识时会明确提示。</p>
+                    <div x-show="messages.length===0 && !chatDocument" class="h-full flex flex-col items-center justify-center text-center text-douyin-gray-400">
+                        <p class="text-sm max-w-xs">向你的装修知识库提问；可上传装修公司报价单（PDF/Excel）结合知识库进行合同审查。</p>
                     </div>
                     <template x-for="(m, idx) in messages" :key="idx">
                         <div :class="m.role==='user' ? 'flex justify-end' : 'flex justify-start'">
@@ -298,12 +310,19 @@
                     </template>
                 </div>
 
-                <div class="p-3 border-t border-douyin-gray-100">
+                <div class="p-3 border-t border-douyin-gray-100 space-y-2">
+                    <input type="file" x-ref="chatFileInput" class="hidden" accept=".pdf,.xlsx,.xlsm,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="uploadChatDocument($event)">
                     <div class="flex items-end gap-2">
-                        <textarea x-model="chatInput" @keydown.enter.prevent="sendChat()" rows="1" placeholder="输入问题，回车发送"
+                        <button @click="$refs.chatFileInput.click()" :disabled="chatDocUploading || chatLoading"
+                                class="h-11 w-11 flex-shrink-0 border border-douyin-gray-200 hover:bg-douyin-gray-50 rounded-xl text-douyin-gray-600 disabled:opacity-50" title="上传报价单 PDF/Excel">
+                            <span x-show="!chatDocUploading">📎</span>
+                            <span x-show="chatDocUploading" class="text-xs">…</span>
+                        </button>
+                        <textarea x-model="chatInput" @keydown.enter.prevent="sendChat()" rows="1" placeholder="输入问题，如：这份报价单有哪些风险？"
                                   class="flex-1 px-4 py-2.5 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring max-h-32" :disabled="chatLoading"></textarea>
                         <button @click="sendChat()" :disabled="!chatInput.trim() || chatLoading" class="h-11 px-5 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">发送</button>
                     </div>
+                    <p x-show="chatDocError" class="text-xs text-red-600" x-text="chatDocError"></p>
                 </div>
             </div>
         </div>
@@ -335,6 +354,7 @@
                 showEdit:false, editCard:null,
                 // 问答
                 messages:[], chatInput:'', chatLoading:false,
+                chatDocument:null, chatDocUploading:false, chatDocError:'',
 
                 get apiKeyConfigured(){ return this.serverApiKeyConfigured || !!this.apiKey; },
 
@@ -470,16 +490,37 @@
                 },
 
                 // ---------- 问答 ----------
+                clearChat(){ this.messages=[]; this.chatDocument=null; this.chatDocError=''; },
+                removeChatDocument(){ this.chatDocument=null; this.chatDocError=''; },
+                async uploadChatDocument(ev){
+                    const file=ev.target.files?.[0];
+                    if(!file) return;
+                    this.chatDocError=''; this.chatDocUploading=true;
+                    try{
+                        const fd=new FormData(); fd.append('file', file);
+                        const r=await fetch('/api/documents/parse',{method:'POST',body:fd});
+                        const d=await r.json();
+                        if(r.ok&&d.success){
+                            this.chatDocument={filename:d.filename,text:d.text,char_count:d.char_count,truncated:d.truncated};
+                            this.showToast('文件已识别：'+d.filename);
+                            if(!this.chatInput.trim()) this.chatInput='请结合知识库审查这份报价单，指出风险项和遗漏项';
+                        } else { this.chatDocError=d.detail||'文件解析失败'; }
+                    }catch(e){ this.chatDocError='上传失败'; }
+                    finally{ this.chatDocUploading=false; ev.target.value=''; }
+                },
                 scrollChat(){ const el=this.$refs.chatBox; if(el){ el.scrollTop=el.scrollHeight; } },
                 async sendChat(){
                     const q=this.chatInput.trim(); if(!q||this.chatLoading) return;
-                    this.messages.push({role:'user',content:q});
+                    const docLabel=this.chatDocument ? ` [附件: ${this.chatDocument.filename}]` : '';
+                    this.messages.push({role:'user',content:q+docLabel});
                     this.chatInput=''; this.chatLoading=true;
-                    this.messages.push({role:'assistant',content:'',pending:true,grounded:true,citations:[],showCite:false});
+                    this.messages.push({role:'assistant',content:'',pending:true,grounded:true,citations:[],showCite:false,hasDocument:!!this.chatDocument});
                     this.$nextTick(()=>this.scrollChat());
                     const msg=this.messages[this.messages.length-1];
-                    try{ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,api_key:this.apiKey})}); const d=await r.json();
-                        if(r.ok&&d.success){ msg.content=d.answer; msg.grounded=d.grounded; msg.citations=d.citations||[]; }
+                    const body={question:q,api_key:this.apiKey};
+                    if(this.chatDocument){ body.document_text=this.chatDocument.text; body.document_name=this.chatDocument.filename; }
+                    try{ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const d=await r.json();
+                        if(r.ok&&d.success){ msg.content=d.answer; msg.grounded=d.grounded; msg.citations=d.citations||[]; msg.hasDocument=d.has_document; }
                         else { msg.content=d.detail||'出错了'; msg.error=true; } }
                     catch(e){ msg.content='网络错误'; msg.error=true; }
                     finally{ msg.pending=false; this.chatLoading=false; this.$nextTick(()=>this.scrollChat()); }

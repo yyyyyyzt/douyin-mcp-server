@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video" / "scripts"
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,9 +36,10 @@ import requests
 from douyin_downloader import get_video_info, extract_text
 
 # 核心模块：知识库存储、LLM、结构化、检索、问答
-from core import db, structure, retrieve, qa
+from core import db, structure, retrieve, qa, documents
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
+from core.documents import DocumentParseError
 
 # 知识库数据库路径（可用环境变量覆盖）
 DB_PATH = os.getenv(
@@ -730,25 +731,51 @@ class ChatRequest(BaseModel):
     question: str
     top_k: Optional[int] = None
     api_key: str = ""  # 可选，未传则用环境变量 LLM_API_KEY / API_KEY
+    document_text: Optional[str] = None  # 上传文件解析后的正文
+    document_name: Optional[str] = None  # 原始文件名
+
+
+@app.post("/api/documents/parse")
+async def parse_uploaded_document(file: UploadFile = File(...)):
+    """解析上传的 PDF / Excel 报价单，返回提取文本（供问答/合同审查）。"""
+    filename = (file.filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="未提供文件名")
+
+    content = await file.read()
+    try:
+        result = documents.parse_document(filename, content)
+    except DocumentParseError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"success": True, **result}
 
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, conn=Depends(get_db)):
     """基于知识库的问答：检索 → 拼 prompt → LLM → 带引用回答（防幻觉）。
 
-    无命中或最高分低于阈值 → grounded=false：prompt 切换为「未找到相关标准 + 通用参考(带声明)」，
-    且不返回引用，前端据此展示「未基于个人知识库」的警告。
+    可附带 document_text/document_name（报价单 PDF/Excel 解析结果），
+    结合知识库进行合同审查等分析。
     """
     question = (req.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="问题不能为空")
+
+    document = None
+    doc_text = (req.document_text or "").strip()
+    if doc_text:
+        document = {
+            "filename": (req.document_name or "上传文件").strip(),
+            "text": doc_text,
+        }
 
     top_k = req.top_k if (req.top_k and req.top_k > 0) else retrieve.DEFAULT_TOP_K
     results = retrieve.retrieve(conn, question, top_k=top_k)
     grounded = retrieve.is_grounded(results)
     cards = results if grounded else []
 
-    messages = qa.build_messages(question, cards, grounded)
+    messages = qa.build_messages(question, cards, grounded, document=document)
     llm = resolve_llm_client(req.api_key)
     try:
         answer = llm.chat(messages)
@@ -760,6 +787,7 @@ async def chat_endpoint(req: ChatRequest, conn=Depends(get_db)):
         "answer": answer,
         "grounded": grounded,
         "citations": [qa.to_citation(c) for c in cards],
+        "has_document": bool(document),
     }
 
 
