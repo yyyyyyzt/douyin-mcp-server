@@ -40,4 +40,23 @@ def test_webui_health_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert "api_key_configured" in body
+    assert body["api_key_configured"] is True
+
+
+def test_webui_config_endpoint():
+    from app import app
+
+    async def _call():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            return await client.get("/api/config")
+
+    resp = asyncio.run(_call())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["api_key_configured"] is True
+    assert "llm_models" in body
+    assert "asr_models" in body
+    assert "defaults" in body

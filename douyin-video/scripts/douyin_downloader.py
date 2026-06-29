@@ -71,6 +71,26 @@ DEFAULT_ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
 DEFAULT_MODEL = DEFAULT_ASR_MODEL  # 向后兼容旧引用
 
 
+def _resolve_api_key(explicit: Optional[str] = None) -> str:
+    if explicit:
+        return explicit
+    try:
+        from core.settings import get_settings
+        return get_settings().api_key
+    except ImportError:
+        return os.getenv("API_KEY", "")
+
+
+def _resolve_asr_model(explicit: Optional[str] = None) -> str:
+    if explicit:
+        return explicit
+    try:
+        from core.settings import resolve_asr_model
+        return resolve_asr_model("")
+    except ImportError:
+        return os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
+
+
 def get_video_cache_dir() -> Path:
     """视频与转写缓存目录（可用 VIDEO_CACHE_DIR 覆盖）。"""
     env = os.getenv("VIDEO_CACHE_DIR")
@@ -114,9 +134,9 @@ class DouyinProcessor:
     """抖音视频处理器"""
 
     def __init__(self, api_key: str = "", api_base_url: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = api_key
+        self.api_key = api_key or _resolve_api_key()
         self.api_base_url = api_base_url or DEFAULT_API_BASE_URL
-        self.model = model or os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
+        self.model = model or _resolve_asr_model()
         self.temp_dir = Path(tempfile.mkdtemp())
 
     def __del__(self):
@@ -412,11 +432,11 @@ def extract_text(share_link: str, api_key: Optional[str] = None, output_dir: Opt
         if on_progress:
             on_progress(phase, progress, message)
 
-    api_key = api_key or os.getenv('API_KEY')
+    api_key = _resolve_api_key(api_key)
     if not api_key:
-        raise ValueError("未设置环境变量 API_KEY，请先获取硅基流动 API 密钥")
+        raise ValueError("未配置 API Key，请在项目根目录 .env 中设置 API_KEY")
 
-    asr_model = asr_model or os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
+    asr_model = _resolve_asr_model(asr_model)
     processor = DouyinProcessor(api_key, model=asr_model)
     cache_dir = get_video_cache_dir() if use_cache else None
 

@@ -72,11 +72,11 @@
                 <div class="flex items-center gap-2">
                     <button @click="showSettings = true"
                             class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs sm:text-sm cursor-pointer hover:opacity-80 transition-smooth"
-                            :class="apiKeyConfigured ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'">
+                            :class="serverConfigured ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'">
                         <span class="relative flex h-2 w-2">
-                            <span class="relative inline-flex rounded-full h-2 w-2" :class="apiKeyConfigured ? 'bg-green-500' : 'bg-amber-500'"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2" :class="serverConfigured ? 'bg-green-500' : 'bg-amber-500'"></span>
                         </span>
-                        <span x-text="apiKeyConfigured ? 'API 已连接' : '配置 API'"></span>
+                        <span x-text="serverConfigured ? '服务就绪' : '未配置密钥'"></span>
                     </button>
                 </div>
             </div>
@@ -96,22 +96,40 @@
         </div>
     </nav>
 
-    <!-- Settings Modal -->
+    <!-- Settings Modal：模型选择 -->
     <div x-show="showSettings" x-transition.opacity class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" @click.self="showSettings=false" style="display:none">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-fadeIn">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-douyin-gray-900">API 配置</h3>
+                <h3 class="text-lg font-semibold text-douyin-gray-900">模型设置</h3>
                 <button @click="showSettings=false" class="w-8 h-8 rounded-full hover:bg-douyin-gray-100 flex items-center justify-center">✕</button>
             </div>
-            <p class="text-sm text-douyin-gray-500 mb-3">硅基流动 API Key（语音转写与文本理解可共用）。仅保存在浏览器本地。</p>
-            <input :type="showApiKey ? 'text':'password'" x-model="apiKeyInput" placeholder="sk-xxxxxxxx"
-                   class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl focus-ring transition-smooth font-mono">
-            <label class="flex items-center gap-2 mt-2 text-xs text-douyin-gray-500"><input type="checkbox" x-model="showApiKey"> 显示</label>
-            <div class="flex gap-3 mt-4">
-                <a href="https://cloud.siliconflow.cn/i/TxUlXG3u" target="_blank" class="flex-1 h-11 border border-douyin-gray-200 hover:bg-douyin-gray-50 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth flex items-center justify-center">获取 API Key</a>
-                <button @click="saveApiKey" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth">保存</button>
+            <p class="text-sm text-douyin-gray-500 mb-4">API 密钥由服务端 <code class="text-xs bg-douyin-gray-100 px-1 rounded">.env</code> 配置，此处仅选择转写与理解模型。选择会保存在浏览器本地。</p>
+            <div x-show="!serverConfigured" class="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-xl">
+                服务端未检测到 API Key，请复制 <code class="text-xs">.env.example</code> 为 <code class="text-xs">.env</code> 并填入密钥后重启服务。
             </div>
-            <button x-show="apiKey" @click="clearApiKey" class="w-full h-10 mt-2 text-sm text-red-500 hover:bg-red-50 rounded-xl transition-smooth">清除已保存的 Key</button>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-douyin-gray-500 mb-1">语音转写模型 (ASR)</label>
+                    <select x-model="asrModel" class="w-full px-3 py-2.5 text-sm border border-douyin-gray-200 rounded-xl focus-ring bg-white">
+                        <template x-for="m in asrModels" :key="m.id">
+                            <option :value="m.id" x-text="m.name + (m.tier==='premium' ? ' ★' : '') + ' — ' + m.description"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-douyin-gray-500 mb-1">知识整理 / 问答模型 (LLM)</label>
+                    <select x-model="llmModel" class="w-full px-3 py-2.5 text-sm border border-douyin-gray-200 rounded-xl focus-ring bg-white">
+                        <template x-for="m in llmModels" :key="m.id">
+                            <option :value="m.id" x-text="m.name + (m.tier==='premium' ? ' ★高级' : '') + ' — ' + m.description"></option>
+                        </template>
+                    </select>
+                    <p class="text-xs text-douyin-gray-400 mt-1">★ 高级模型后续可能对付费用户开放，当前可直接选用。</p>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5">
+                <button @click="resetModels" class="flex-1 h-11 border border-douyin-gray-200 hover:bg-douyin-gray-50 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth">恢复默认</button>
+                <button @click="saveModels" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth">保存</button>
+            </div>
         </div>
     </div>
 
@@ -340,8 +358,11 @@
                 tab: 'extract',
                 tabs: [ {id:'extract',label:'知识收集'}, {id:'knowledge',label:'知识库'}, {id:'chat',label:'问答'} ],
                 toast: '',
-                showSettings: false, showApiKey: false,
-                apiKey: '', apiKeyInput: '', serverApiKeyConfigured: false,
+                showSettings: false,
+                serverConfigured: false,
+                llmModel: '', asrModel: '',
+                defaultLlmModel: '', defaultAsrModel: '',
+                llmModels: [], asrModels: [],
                 // 知识收集
                 url:'', previewTitle:'', previewContent:'', transcript:'',
                 videoId:null, sourceUrl:'',
@@ -356,32 +377,63 @@
                 messages:[], chatInput:'', chatLoading:false,
                 chatDocument:null, chatDocUploading:false, chatDocError:'',
 
-                get apiKeyConfigured(){ return this.serverApiKeyConfigured || !!this.apiKey; },
+                get modelPayload(){
+                    const p={};
+                    if(this.llmModel) p.llm_model=this.llmModel;
+                    if(this.asrModel) p.asr_model=this.asrModel;
+                    return p;
+                },
 
                 init(){
-                    const k = localStorage.getItem('reno_api_key');
-                    if(k){ this.apiKey=k; this.apiKeyInput=k; }
-                    this.checkHealth();
+                    const lm=localStorage.getItem('reno_llm_model');
+                    const am=localStorage.getItem('reno_asr_model');
+                    if(lm) this.llmModel=lm;
+                    if(am) this.asrModel=am;
+                    this.loadConfig();
                     if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
                 },
+                async loadConfig(){
+                    try{
+                        const r=await fetch('/api/config');
+                        const d=await r.json();
+                        this.serverConfigured=!!d.api_key_configured;
+                        this.llmModels=d.llm_models||[];
+                        this.asrModels=d.asr_models||[];
+                        this.defaultLlmModel=d.defaults?.llm_model||'';
+                        this.defaultAsrModel=d.defaults?.asr_model||'';
+                        if(!this.llmModel) this.llmModel=this.defaultLlmModel;
+                        if(!this.asrModel) this.asrModel=this.defaultAsrModel;
+                    }catch(e){}
+                },
                 async checkHealth(){
-                    try{ const r=await fetch('/api/health'); const d=await r.json(); this.serverApiKeyConfigured=d.api_key_configured; }catch(e){}
+                    try{ const r=await fetch('/api/health'); const d=await r.json(); this.serverConfigured=!!d.api_key_configured; }catch(e){}
                 },
                 switchTab(t){ this.tab=t; if(t==='knowledge' && !this.kbLoaded){ this.loadCards(); this.kbLoaded=true; } },
                 showToast(m){ this.toast=m; setTimeout(()=>this.toast='',2200); },
-                saveApiKey(){ if(this.apiKeyInput){ this.apiKey=this.apiKeyInput; localStorage.setItem('reno_api_key',this.apiKeyInput); this.showSettings=false; this.showToast('API Key 已保存'); } },
-                clearApiKey(){ this.apiKey=''; this.apiKeyInput=''; localStorage.removeItem('reno_api_key'); this.showToast('已清除'); },
+                saveModels(){
+                    localStorage.setItem('reno_llm_model', this.llmModel);
+                    localStorage.setItem('reno_asr_model', this.asrModel);
+                    this.showSettings=false;
+                    this.showToast('模型设置已保存');
+                },
+                resetModels(){
+                    this.llmModel=this.defaultLlmModel;
+                    this.asrModel=this.defaultAsrModel;
+                    localStorage.removeItem('reno_llm_model');
+                    localStorage.removeItem('reno_asr_model');
+                    this.showToast('已恢复默认模型');
+                },
 
                 // ---------- 知识收集 ----------
                 async transcribeLink(){
                     if(!this.url.trim()||this.loading) return;
-                    if(!this.apiKeyConfigured){ this.showSettings=true; return; }
+                    if(!this.serverConfigured){ this.showSettings=true; this.collectError='请先在服务端 .env 配置 API_KEY'; return; }
                     this.collectError=''; this.transcript='';
                     this.previewTitle=''; this.previewContent=''; this.videoId=null; this.sourceUrl='';
                     this.loading=true; this.loadingProgress=0;
                     this.loadingText='转写中'; this.loadingMessage='已提交任务…';
                     try{
-                        const r=await fetch('/api/video/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,api_key:this.apiKey})});
+                        const r=await fetch('/api/video/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,...this.modelPayload})});
                         const d=await r.json();
                         if(!r.ok||!d.success){ this.collectError=d.detail||'提交失败'; this.loading=false; return; }
                         this.pollExtractTask(d.task_id);
@@ -429,11 +481,11 @@
                 async structureKnowledge(){
                     const text=this.structureSource;
                     if(!text||this.structuring) return;
-                    if(!this.apiKeyConfigured){ this.showSettings=true; return; }
+                    if(!this.serverConfigured){ this.showSettings=true; this.collectError='请先在服务端 .env 配置 API_KEY'; return; }
                     this.structuring=true; this.collectError='';
                     try{
                         const r=await fetch('/api/cards/structure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-                            text, hint_title:this.previewTitle||this.videoInfo?.title||'', api_key:this.apiKey
+                            text, hint_title:this.previewTitle||this.videoInfo?.title||'', ...this.modelPayload
                         })});
                         const d=await r.json();
                         if(r.ok&&d.success){
@@ -511,13 +563,14 @@
                 scrollChat(){ const el=this.$refs.chatBox; if(el){ el.scrollTop=el.scrollHeight; } },
                 async sendChat(){
                     const q=this.chatInput.trim(); if(!q||this.chatLoading) return;
+                    if(!this.serverConfigured){ this.showSettings=true; this.showToast('请先在服务端 .env 配置 API_KEY'); return; }
                     const docLabel=this.chatDocument ? ` [附件: ${this.chatDocument.filename}]` : '';
                     this.messages.push({role:'user',content:q+docLabel});
                     this.chatInput=''; this.chatLoading=true;
                     this.messages.push({role:'assistant',content:'',pending:true,grounded:true,citations:[],showCite:false,hasDocument:!!this.chatDocument});
                     this.$nextTick(()=>this.scrollChat());
                     const msg=this.messages[this.messages.length-1];
-                    const body={question:q,api_key:this.apiKey};
+                    const body={question:q,...this.modelPayload};
                     if(this.chatDocument){ body.document_text=this.chatDocument.text; body.document_name=this.chatDocument.filename; }
                     try{ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const d=await r.json();
                         if(r.ok&&d.success){ msg.content=d.answer; msg.grounded=d.grounded; msg.citations=d.citations||[]; msg.hasDocument=d.has_document; }

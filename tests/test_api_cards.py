@@ -38,7 +38,7 @@ def client(tmp_path):
         ])
     ])
 
-    def _resolve_llm(api_key=""):
+    def _resolve_llm(llm_model=""):
         return fake
 
     webapp.app.dependency_overrides[webapp.get_db] = _get_db

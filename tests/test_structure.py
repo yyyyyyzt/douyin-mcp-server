@@ -80,6 +80,32 @@ def test_structure_raises_after_retries():
         structure.structure_text_single("文案", llm, max_retries=2)
 
 
+def test_structure_rich_fields_in_raw_text():
+    llm = FakeLLM([
+        _card_payload([
+            {
+                "title": "卫生间防水",
+                "stage": "防水",
+                "content": "防水高度应刷到 1.8 米",
+                "steps": [{"action": "基层处理", "detail": "清理干净后涂刷"}],
+                "standards": ["闭水试验 24 小时无渗漏"],
+                "warnings": ["门口要做挡水坝"],
+                "materials": ["防水涂料"],
+                "tags": ["防水", "卫生间"],
+            }
+        ])
+    ])
+    card = structure.structure_text_single("防水要刷到1.8米……", llm)
+    assert card["stage"] == "防水"
+    assert "1.8 米" in card["raw_text"]
+    assert "闭水试验" in card["raw_text"]
+    assert "挡水坝" in card["raw_text"]
+    parsed = json.loads(card["structured_json"])
+    assert parsed["stage"] == "防水"
+    assert len(parsed["standards"]) == 1
+    assert len(parsed["tags"]) == 2
+
+
 def test_structure_empty_text_raises():
     llm = FakeLLM([])
     with pytest.raises(ValueError):

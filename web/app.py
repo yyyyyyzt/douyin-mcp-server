@@ -3,8 +3,7 @@
 抖音视频文案提取器 WebUI
 
 启动方式:
-    cd douyin-mcp-server
-    export API_KEY="sk-xxx"
+    cp .env.example .env   # 填入 API_KEY
     python web/app.py
     # 访问 http://localhost:8080
 """
@@ -40,6 +39,12 @@ from core import db, structure, retrieve, qa, documents
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
 from core.documents import DocumentParseError
+from core.settings import (
+    ASR_MODEL_CATALOG,
+    LLM_MODEL_CATALOG,
+    get_settings,
+    resolve_asr_model,
+)
 
 # 知识库数据库路径（可用环境变量覆盖）
 DB_PATH = os.getenv(
@@ -115,9 +120,9 @@ def get_llm_client() -> LLMClient:
     return LLMClient.from_env()
 
 
-def resolve_llm_client(api_key: str = "") -> LLMClient:
-    """请求级 LLM 客户端：浏览器 api_key 优先，其次服务端环境变量。"""
-    return LLMClient.resolve(api_key)
+def resolve_llm_client(llm_model: str = "") -> LLMClient:
+    """请求级 LLM 客户端：模型可由前端选择，密钥来自服务端 .env。"""
+    return LLMClient.resolve(llm_model)
 
 
 def get_extractor() -> Callable:
@@ -133,7 +138,8 @@ def _serialize_card(row: dict) -> dict:
 class VideoRequest(BaseModel):
     """视频请求模型"""
     url: str
-    api_key: str = ""  # 可选，从前端传入
+    llm_model: str = ""  # 可选，覆盖默认 LLM
+    asr_model: str = ""  # 可选，覆盖默认 ASR
 
 
 class VideoInfoResponse(BaseModel):
@@ -164,10 +170,25 @@ async def index(request: Request):
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
-    api_key = os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")
+    settings = get_settings()
     return {
         "status": "ok",
-        "api_key_configured": bool(api_key)
+        "api_key_configured": settings.api_configured,
+    }
+
+
+@app.get("/api/config")
+async def app_config():
+    """前端模型选择：可选模型目录与默认值（密钥不暴露）。"""
+    settings = get_settings()
+    return {
+        "api_key_configured": settings.api_configured,
+        "defaults": {
+            "llm_model": settings.llm_model,
+            "asr_model": settings.asr_model,
+        },
+        "llm_models": LLM_MODEL_CATALOG,
+        "asr_models": ASR_MODEL_CATALOG,
     }
 
 
@@ -192,19 +213,21 @@ async def extract_transcript_async(
     extractor: Callable = Depends(get_extractor),
 ):
     """异步转写抖音视频：解析 → 下载(可缓存) → 转写 → AI 整理，返回 task_id 供轮询。"""
-    api_key = req.api_key or os.getenv("API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="请先配置 API Key")
+    settings = get_settings()
+    if not settings.api_configured:
+        raise HTTPException(status_code=503, detail="服务端未配置 API Key，请在 .env 中设置 API_KEY")
 
     url = (req.url or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="链接不能为空")
 
-    task_id = _new_extract_task(url, api_key)
-    llm = resolve_llm_client(req.api_key)
+    api_key = settings.api_key
+    asr_model = resolve_asr_model(req.asr_model)
+    llm = resolve_llm_client(req.llm_model)
+    task_id = _new_extract_task(url)
     worker = threading.Thread(
         target=_run_extract_task,
-        args=(task_id, url, api_key, extractor, llm),
+        args=(task_id, url, api_key, asr_model, extractor, llm),
         daemon=True,
     )
     worker.start()
@@ -220,7 +243,7 @@ async def get_extract_task(task_id: str):
     return {"success": True, "task": task}
 
 
-def _new_extract_task(url: str, api_key: str) -> str:
+def _new_extract_task(url: str) -> str:
     task_id = uuid.uuid4().hex
     with _tasks_lock:
         _extract_tasks[task_id] = {
@@ -262,6 +285,7 @@ def _run_extract_task(
     task_id: str,
     url: str,
     api_key: str,
+    asr_model: str,
     extractor: Callable,
     llm,
 ) -> None:
@@ -275,6 +299,7 @@ def _run_extract_task(
         result = extractor(
             url,
             api_key=api_key,
+            asr_model=asr_model,
             show_progress=False,
             on_progress=on_progress,
             use_cache=True,
@@ -329,11 +354,16 @@ def _run_extract_task(
 @app.post("/api/video/extract-sync", response_model=ExtractResponse)
 async def extract_transcript_sync(req: VideoRequest):
     """同步提取视频文案（兼容旧调用，无进度条）。"""
-    api_key = req.api_key or os.getenv("API_KEY", "")
-    if not api_key:
-        return ExtractResponse(success=False, error="请先配置 API Key")
+    settings = get_settings()
+    if not settings.api_configured:
+        return ExtractResponse(success=False, error="服务端未配置 API Key，请在 .env 中设置 API_KEY")
     try:
-        result = extract_text(req.url, api_key=api_key, show_progress=False)
+        result = extract_text(
+            req.url,
+            api_key=settings.api_key,
+            asr_model=resolve_asr_model(req.asr_model),
+            show_progress=False,
+        )
         return ExtractResponse(
             success=True,
             video_id=result["video_info"]["video_id"],
@@ -394,7 +424,7 @@ class CardStructureRequest(BaseModel):
     """AI 整理请求（仅生成预览，不入库）。"""
     text: str
     hint_title: Optional[str] = ""
-    api_key: str = ""
+    llm_model: str = ""
 
 
 class CardSaveRequest(BaseModel):
@@ -413,7 +443,7 @@ async def structure_card_preview(req: CardStructureRequest):
     if not text:
         raise HTTPException(status_code=400, detail="文案内容不能为空")
 
-    llm = resolve_llm_client(req.api_key)
+    llm = resolve_llm_client(req.llm_model)
     try:
         card = structure.structure_text_single(text, llm, hint_title=(req.hint_title or "").strip())
     except StructureError as e:
@@ -425,6 +455,7 @@ async def structure_card_preview(req: CardStructureRequest):
         "success": True,
         "preview": {
             "title": card.get("title") or "",
+            "stage": card.get("stage") or "",
             "content": card.get("raw_text") or text,
         },
     }
@@ -539,6 +570,7 @@ def _run_import_task(
     url: str,
     stage: Optional[str],
     api_key: str,
+    asr_model: str,
     extractor: Callable,
     db_path: str,
     llm,
@@ -553,7 +585,12 @@ def _run_import_task(
                 _update_task(task_id, status=phase, progress=progress, message=message)
 
             result = extractor(
-                url, api_key=api_key, show_progress=False, on_progress=_on_progress, use_cache=True
+                url,
+                api_key=api_key,
+                asr_model=asr_model,
+                show_progress=False,
+                on_progress=_on_progress,
+                use_cache=True,
             )
         except Exception as e:  # 网络/解析/转写失败统一兜底
             _update_task(task_id, status="failed", error=f"解析或转写失败: {e}", message="解析或转写失败")
@@ -593,14 +630,14 @@ def _run_import_task(
 
         # 4) 入库（每个视频一条）
         try:
+            structured = json.loads(card.get("structured_json") or "{}")
+            structured["transcript"] = text
             card_id = db.insert_card(
                 conn,
+                stage=stage or card.get("stage"),
                 title=card["title"],
                 raw_text=card["raw_text"],
-                structured_json=json.dumps(
-                    {"title": card["title"], "content": card["raw_text"], "transcript": text},
-                    ensure_ascii=False,
-                ),
+                structured_json=json.dumps(structured, ensure_ascii=False),
                 source_type="douyin_link",
                 source_url=url,
                 video_id=video_id,
@@ -629,7 +666,8 @@ class CardFromLinkRequest(BaseModel):
     """抖音链接录入请求。"""
     url: str
     stage: Optional[str] = None
-    api_key: str = ""  # 可选，未传则用环境变量 API_KEY
+    llm_model: str = ""
+    asr_model: str = ""
 
 
 @app.post("/api/cards/from-link")
@@ -643,12 +681,17 @@ async def create_cards_from_link(
     if not url:
         raise HTTPException(status_code=400, detail="链接不能为空")
 
-    api_key = req.api_key or os.getenv("API_KEY", "")
-    llm = resolve_llm_client(req.api_key)
+    settings = get_settings()
+    if not settings.api_configured:
+        raise HTTPException(status_code=503, detail="服务端未配置 API Key，请在 .env 中设置 API_KEY")
+
+    api_key = settings.api_key
+    asr_model = resolve_asr_model(req.asr_model)
+    llm = resolve_llm_client(req.llm_model)
     task_id = _new_task(url)
     worker = threading.Thread(
         target=_run_import_task,
-        args=(task_id, url, req.stage, api_key, extractor, db_path, llm),
+        args=(task_id, url, req.stage, api_key, asr_model, extractor, db_path, llm),
         daemon=True,
     )
     worker.start()
@@ -730,7 +773,7 @@ class ChatRequest(BaseModel):
     """问答请求。"""
     question: str
     top_k: Optional[int] = None
-    api_key: str = ""  # 可选，未传则用环境变量 LLM_API_KEY / API_KEY
+    llm_model: str = ""  # 可选，覆盖默认 LLM
     document_text: Optional[str] = None  # 上传文件解析后的正文
     document_name: Optional[str] = None  # 原始文件名
 
@@ -776,7 +819,7 @@ async def chat_endpoint(req: ChatRequest, conn=Depends(get_db)):
     cards = results if grounded else []
 
     messages = qa.build_messages(question, cards, grounded, document=document)
-    llm = resolve_llm_client(req.api_key)
+    llm = resolve_llm_client(req.llm_model)
     try:
         answer = llm.chat(messages)
     except LLMError as e:
@@ -795,7 +838,9 @@ def main():
     """启动服务"""
     port = int(os.getenv("PORT", "8080"))
     print(f"🚀 启动文案提取器 WebUI: http://localhost:{port}")
-    print(f"📝 API_KEY 配置状态: {'已配置' if os.getenv('API_KEY') else '未配置'}")
+    settings = get_settings()
+    print(f"📝 API Key: {'已配置 (.env)' if settings.api_configured else '未配置 — 请复制 .env.example 为 .env'}")
+    print(f"🤖 默认模型: LLM={settings.llm_model}  ASR={settings.asr_model}")
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 

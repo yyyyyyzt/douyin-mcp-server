@@ -68,7 +68,7 @@ def env(tmp_path):
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: fake_extract
     original_resolve = webapp.resolve_llm_client
-    webapp.resolve_llm_client = lambda api_key="": fake_llm
+    webapp.resolve_llm_client = lambda llm_model="": fake_llm
 
     client = TestClient(webapp.app)
     yield client, conn, db_path, extract_calls
@@ -198,7 +198,7 @@ def test_from_link_multi_cards_merged_to_one(env):
         {"title": "瓦工细节A", "content": "细节 A 正文"},
         {"title": "防水细节B", "content": "细节 B 正文"},
     ]
-    webapp.resolve_llm_client = lambda api_key="": FakeLLM([_card_payload(multi)])
+    webapp.resolve_llm_client = lambda llm_model="": FakeLLM([_card_payload(multi)])
 
     resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/multi/"})
     task_id = resp.json()["task_id"]

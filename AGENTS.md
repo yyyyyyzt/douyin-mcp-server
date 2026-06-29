@@ -25,7 +25,8 @@ startup update script already runs `uv sync`, so the `.venv` is present and depe
 - **CLI**: `python douyin-video/scripts/douyin_downloader.py --help`.
 
 ### Gotchas
-- Transcript extraction (`extract_*` / "提取文案") requires the `API_KEY` env var
+- API Key 配置在项目根目录 `.env`（复制 `.env.example`），不在浏览器设置；用户可在界面选择 LLM/ASR 模型。
+- Transcript extraction (`extract_*` / "提取文案") requires `API_KEY` in `.env`
   (aliyun/SiliconFlow ASR key). Without it the app returns a graceful "请先配置 API Key"
   error — this is expected, not a bug.
 - "获取信息 / parse info" needs live network access to Douyin and a *currently valid*

@@ -105,7 +105,7 @@ def test_chat_raises_after_max_retries(monkeypatch):
 
 
 def test_missing_api_key_raises():
-    with pytest.raises(llm.LLMError):
+    with pytest.raises(llm.LLMError, match="\\.env"):
         llm.LLMClient(api_key="", base_url="https://x/v1", model="m").chat([{"role": "user", "content": "hi"}])
 
 
@@ -126,15 +126,16 @@ def test_from_env_falls_back_to_api_key(monkeypatch):
     assert client.api_key == "sk-shared"
 
 
-def test_resolve_prefers_request_api_key(monkeypatch):
-    monkeypatch.setenv("LLM_API_KEY", "sk-env")
+def test_resolve_prefers_request_model(monkeypatch):
     monkeypatch.setenv("API_KEY", "sk-shared")
-    client = llm.LLMClient.resolve("sk-browser")
-    assert client.api_key == "sk-browser"
-
-
-def test_resolve_falls_back_to_env(monkeypatch):
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
-    monkeypatch.setenv("API_KEY", "sk-shared")
-    client = llm.LLMClient.resolve("")
+    monkeypatch.setenv("LLM_MODEL", "default-model")
+    client = llm.LLMClient.resolve("user-model")
+    assert client.model == "user-model"
     assert client.api_key == "sk-shared"
+
+
+def test_resolve_falls_back_to_default_model(monkeypatch):
+    monkeypatch.setenv("API_KEY", "sk-shared")
+    monkeypatch.setenv("LLM_MODEL", "default-model")
+    client = llm.LLMClient.resolve("")
+    assert client.model == "default-model"

@@ -47,7 +47,7 @@ def extract_env(tmp_path):
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: _fake_extract
     original_resolve = webapp.resolve_llm_client
-    webapp.resolve_llm_client = lambda api_key="": FakeLLM()
+    webapp.resolve_llm_client = lambda llm_model="": FakeLLM()
 
     client = TestClient(webapp.app)
     yield client, conn, tmp_path
@@ -60,7 +60,7 @@ def test_extract_task_returns_preview(extract_env):
     client, _, _ = extract_env
     resp = client.post(
         "/api/video/extract",
-        json={"url": "https://v.douyin.com/test/", "api_key": "sk-test"},
+        json={"url": "https://v.douyin.com/test/"},
     )
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]

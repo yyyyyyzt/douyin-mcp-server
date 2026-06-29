@@ -7,15 +7,13 @@
 - 易测试：允许注入 session，便于单元测试 mock。
 """
 
-import os
 import time
 from typing import Optional
 
 import requests
 
-# 默认指向硅基流动（与本仓库语音识别同一平台，可只配一个 key）
-DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
-DEFAULT_MODEL = "Qwen/Qwen3-8B"
+from core.settings import DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, get_settings, resolve_llm_model
+
 DEFAULT_TIMEOUT = 60
 DEFAULT_MAX_RETRIES = 3
 
@@ -31,38 +29,34 @@ class LLMClient:
     def __init__(
         self,
         api_key: str,
-        base_url: str = DEFAULT_BASE_URL,
-        model: str = DEFAULT_MODEL,
+        base_url: str = DEFAULT_LLM_BASE_URL,
+        model: str = DEFAULT_LLM_MODEL,
         timeout: int = DEFAULT_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
         session=None,
     ):
         self.api_key = api_key
-        self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
-        self.model = model or DEFAULT_MODEL
+        self.base_url = (base_url or DEFAULT_LLM_BASE_URL).rstrip("/")
+        self.model = model or DEFAULT_LLM_MODEL
         self.timeout = timeout
         self.max_retries = max(1, max_retries)
         self._session = session or requests
 
     @classmethod
     def from_env(cls) -> "LLMClient":
-        """从环境变量构造。LLM_API_KEY 缺失时回退到 API_KEY（与语音识别共用）。"""
+        """从配置构造（.env / 环境变量）。"""
         return cls.resolve()
 
     @classmethod
-    def resolve(cls, api_key: str = "") -> "LLMClient":
-        """解析 API Key：请求体优先，其次 LLM_API_KEY，再回退 API_KEY。"""
-        resolved = (api_key or "").strip() or os.getenv("LLM_API_KEY") or os.getenv("API_KEY", "")
-        base_url = os.getenv("LLM_BASE_URL", DEFAULT_BASE_URL)
-        model = os.getenv("LLM_MODEL", DEFAULT_MODEL)
-        timeout = int(os.getenv("LLM_TIMEOUT", str(DEFAULT_TIMEOUT)))
-        max_retries = int(os.getenv("LLM_MAX_RETRIES", str(DEFAULT_MAX_RETRIES)))
+    def resolve(cls, model: str = "") -> "LLMClient":
+        """解析 LLM 客户端：密钥来自服务端配置，模型可请求级覆盖。"""
+        settings = get_settings()
         return cls(
-            api_key=resolved,
-            base_url=base_url,
-            model=model,
-            timeout=timeout,
-            max_retries=max_retries,
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_base_url,
+            model=resolve_llm_model(model),
+            timeout=settings.llm_timeout,
+            max_retries=settings.llm_max_retries,
         )
 
     def chat(
@@ -73,7 +67,7 @@ class LLMClient:
     ) -> str:
         """调用 chat/completions，返回首条回复的文本内容。"""
         if not self.api_key:
-            raise LLMError("未配置 LLM API Key（请设置 LLM_API_KEY 或 API_KEY）")
+            raise LLMError("未配置 API Key，请在项目根目录 .env 中设置 API_KEY")
 
         url = f"{self.base_url}/chat/completions"
         headers = {

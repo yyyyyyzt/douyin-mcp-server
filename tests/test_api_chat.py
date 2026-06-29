@@ -45,7 +45,7 @@ def env(tmp_path):
 
     llm = RecordingLLM()
     original_resolve = webapp.resolve_llm_client
-    webapp.resolve_llm_client = lambda api_key="": llm
+    webapp.resolve_llm_client = lambda llm_model="": llm
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
 
     client = TestClient(webapp.app)
@@ -151,7 +151,7 @@ def test_chat_llm_error_returns_502(env, tmp_path):
     err_llm = RecordingLLM(raise_error=True)
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     original_resolve = webapp.resolve_llm_client
-    webapp.resolve_llm_client = lambda api_key="": err_llm
+    webapp.resolve_llm_client = lambda llm_model="": err_llm
     client = TestClient(webapp.app)
     try:
         resp = client.post("/api/chat", json={"question": "卫生间防水刷多高"})
