@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>AI 装修监理助手</title>
+    <title>自装助手</title>
 
     <!-- PWA -->
     <link rel="manifest" href="/static/manifest.webmanifest">
-    <meta name="theme-color" content="#FE2C55">
+    <meta name="theme-color" content="#FF6B4A">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="装修助手">
-    <link rel="apple-touch-icon" href="/static/icon.svg">
+    <meta name="apple-mobile-web-app-title" content="自装助手">
+    <link rel="apple-touch-icon" href="/static/icon.png">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -25,14 +26,20 @@
                 extend: {
                     fontFamily: { 'sans': ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'] },
                     colors: {
-                        'douyin': {
-                            'red': '#FE2C55', 'pink': '#FF6B9D', 'coral': '#FF4F6D', 'dark': '#161823',
-                            'gray': { 50:'#F8F8F8',100:'#F1F1F2',200:'#E5E5E6',300:'#C9C9CA',400:'#9E9E9F',500:'#6C6C6D',600:'#4A4A4B',700:'#2F2F30',800:'#1F1F20',900:'#121213' }
+                        brand: {
+                            50: '#FFF5F2', 100: '#FFE8E0', 200: '#FFD0C2', 300: '#FFB199',
+                            400: '#FF8F73', 500: '#FF6B4A', 600: '#E85A3A', 700: '#C44A2E',
+                            800: '#9E3B25', 900: '#7A2E1D',
+                        },
+                        surface: {
+                            50: '#FAFAF8', 100: '#F3F2EF', 200: '#E8E6E1', 300: '#D4D1CA',
+                            400: '#9E9B94', 500: '#6B6862', 600: '#4A4844', 700: '#2F2E2B',
+                            800: '#1F1E1C', 900: '#121110',
                         }
                     },
                     boxShadow: {
-                        'card': '0 2px 8px rgba(0,0,0,0.04), 0 4px 24px rgba(0,0,0,0.06)',
-                        'input': '0 0 0 4px rgba(254,44,85,0.1)',
+                        'card': '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.05)',
+                        'nav': '0 -2px 12px rgba(0,0,0,0.06)',
                     }
                 }
             }
@@ -40,544 +47,909 @@
     </script>
     <style>
         * { box-sizing: border-box; }
-        body { font-feature-settings: 'cv02','cv03','cv04','cv11'; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        body {
+            font-feature-settings: 'cv02','cv03','cv04','cv11';
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: #FAFAF8;
+        }
+        .app-main {
+            padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+            min-height: 100vh;
+        }
+        .bottom-nav {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 40;
+            height: calc(64px + env(safe-area-inset-bottom, 0px));
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-top: 1px solid #E8E6E1;
+            box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+        }
+        .bg-gradient-brand { background: linear-gradient(135deg, #FF6B4A 0%, #FF8F73 100%); }
+        .focus-ring:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,107,74,0.2); }
+        .transition-smooth { transition: all 0.2s cubic-bezier(0.4,0,0.2,1); }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
         @keyframes fadeIn { from { opacity:0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
         .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
-        @keyframes spin-slow { to { transform: rotate(360deg);} }
-        .animate-spin-slow { animation: spin-slow 1.2s linear infinite; }
-        .bg-gradient-douyin { background: linear-gradient(135deg,#FE2C55 0%,#FF6B9D 100%); }
-        .bg-gradient-mesh { background: radial-gradient(at 40% 20%, rgba(254,44,85,0.08) 0, transparent 50%), radial-gradient(at 80% 0%, rgba(255,107,157,0.06) 0, transparent 50%); }
-        .focus-ring:focus { outline:none; box-shadow: 0 0 0 4px rgba(254,44,85,0.15); }
-        .transition-smooth { transition: all 0.2s cubic-bezier(0.4,0,0.2,1); }
-        .line-clamp-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton {
+            background: linear-gradient(90deg, #F3F2EF 25%, #E8E6E1 50%, #F3F2EF 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s infinite;
+        }
+        .sheet-backdrop { background: rgba(0,0,0,0.4); }
+        .chat-panel {
+            height: calc(100vh - 56px - 64px - env(safe-area-inset-bottom, 0px));
+            min-height: 320px;
+        }
+        .chip-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .chip-scroll::-webkit-scrollbar { display: none; }
+        [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="bg-douyin-gray-50 min-h-screen bg-gradient-mesh" x-data="renoApp()" x-init="init()">
+<body x-data="renoApp()" x-init="init()">
 
-    <!-- Top Navigation -->
-    <nav class="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-douyin-gray-100">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6">
-            <div class="flex items-center justify-between h-16 gap-3">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-9 h-9 bg-gradient-douyin rounded-xl flex items-center justify-center shadow-lg shadow-douyin-red/20 flex-shrink-0">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-8 9 8M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9M9 14l2 2 4-4"/></svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h1 class="text-base sm:text-lg font-semibold text-douyin-gray-900 truncate">AI 装修监理助手</h1>
-                        <p class="text-xs text-douyin-gray-400 -mt-0.5 hidden sm:block">沉淀知识 · 基于知识库防幻觉问答</p>
-                    </div>
+    <!-- ========== App Shell: Header ========== -->
+    <header class="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-surface-200">
+        <div class="max-w-lg mx-auto px-4 h-14 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 bg-gradient-brand rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-8 9 8M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9M9 14l2 2 4-4"/></svg>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button @click="showSettings = true"
-                            class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs sm:text-sm cursor-pointer hover:opacity-80 transition-smooth"
-                            :class="serverConfigured ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'">
-                        <span class="relative flex h-2 w-2">
-                            <span class="relative inline-flex rounded-full h-2 w-2" :class="serverConfigured ? 'bg-green-500' : 'bg-amber-500'"></span>
-                        </span>
-                        <span x-text="serverConfigured ? '服务就绪' : '未配置密钥'"></span>
-                    </button>
+                <h1 class="text-base font-semibold text-surface-800 truncate">自装助手</h1>
+            </div>
+            <button @click="showSettings = true"
+                    class="w-10 h-10 rounded-full flex items-center justify-center text-surface-500 hover:bg-surface-100 transition-smooth"
+                    title="高级设置">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
+            </button>
+        </div>
+    </header>
+
+  <main class="app-main max-w-lg mx-auto px-4 py-4">
+
+        <!-- ========== Collect Tab ========== -->
+        <div x-show="tab === 'extract'" x-cloak>
+            <p class="text-sm text-surface-500 mb-4">把刷到的装修经验存成自己的知识。</p>
+
+            <div class="bg-white rounded-2xl shadow-card p-4">
+                <textarea x-model="collectInput" rows="4"
+                          placeholder="粘贴抖音分享链接，或直接输入装修经验文字"
+                          class="w-full px-4 py-3 text-sm border border-surface-200 rounded-xl resize-none focus-ring transition-smooth bg-surface-50"
+                          :disabled="collectBusy"></textarea>
+                <button @click="saveToKnowledge()"
+                        :disabled="!collectInput.trim() || collectBusy"
+                        class="mt-3 w-full h-12 bg-gradient-brand hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">
+                    <span x-show="!collectBusy">保存到知识库</span>
+                    <span x-show="collectBusy">处理中…</span>
+                </button>
+            </div>
+
+            <div x-show="!serverConfigured" class="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
+                服务还没连接好，请先完成一次初始化。
+                <button @click="showSettings=true" class="underline ml-1">查看说明</button>
+            </div>
+
+            <!-- Progress -->
+            <div x-show="collectBusy" class="mt-4 bg-white rounded-2xl shadow-card p-4 space-y-3">
+                <template x-for="(step, i) in collectSteps" :key="i">
+                    <div class="flex items-center gap-3">
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0"
+                             :class="collectStep > i ? 'bg-green-100 text-green-700' : (collectStep === i ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400')">
+                            <span x-show="collectStep > i">✓</span>
+                            <span x-show="collectStep <= i" x-text="i+1"></span>
+                        </div>
+                        <span class="text-sm" :class="collectStep >= i ? 'text-surface-800 font-medium' : 'text-surface-400'" x-text="step"></span>
+                    </div>
+                </template>
+                <div class="h-1.5 bg-surface-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-brand transition-all duration-500 rounded-full" :style="'width:' + collectProgress + '%'"></div>
                 </div>
             </div>
 
-            <!-- Tab Switcher (segmented control, mobile friendly) -->
-            <div class="pb-3">
-                <div class="inline-flex w-full sm:w-auto bg-douyin-gray-100 rounded-xl p-1 gap-1">
-                    <template x-for="t in tabs" :key="t.id">
-                        <button @click="switchTab(t.id)"
-                                class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-smooth flex items-center justify-center gap-1.5"
-                                :class="tab === t.id ? 'bg-white text-douyin-gray-900 shadow-sm' : 'text-douyin-gray-500 hover:text-douyin-gray-700'">
-                            <span x-text="t.label"></span>
-                        </button>
-                    </template>
+            <!-- Error -->
+            <div x-show="collectError" class="mt-4 p-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700" x-text="collectError"></div>
+
+            <!-- Success preview -->
+            <div x-show="lastSavedCard && !collectBusy" class="mt-4 bg-white rounded-2xl shadow-card p-4 animate-fadeIn">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs">✓</span>
+                    <span class="text-sm font-medium text-green-700">已保存到知识库</span>
+                </div>
+                <h3 class="font-medium text-surface-800" x-text="lastSavedCard?.title || '装修知识'"></h3>
+                <p class="text-sm text-surface-500 mt-1 line-clamp-2" x-text="lastSavedCard?.raw_text"></p>
+                <div class="flex gap-2 mt-3">
+                    <button @click="openCollectEdit()" class="flex-1 h-10 border border-surface-200 rounded-xl text-sm text-surface-700 hover:bg-surface-50">查看并修改</button>
+                    <button @click="switchTab('knowledge')" class="flex-1 h-10 bg-surface-100 rounded-xl text-sm text-surface-700 hover:bg-surface-200">去知识库</button>
+                </div>
+            </div>
+
+            <!-- Inline edit after save -->
+            <div x-show="showCollectEdit" class="mt-4 bg-white rounded-2xl shadow-card p-4 space-y-3">
+                <h3 class="text-sm font-medium text-surface-700">修改刚保存的内容</h3>
+                <input x-model="editPreviewTitle" placeholder="标题" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring">
+                <textarea x-model="editPreviewContent" rows="5" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl resize-none focus-ring"></textarea>
+                <button x-show="showTranscript" @click="showTranscriptDetail = !showTranscriptDetail"
+                        class="text-xs text-brand-600" x-text="showTranscriptDetail ? '收起原文' : '查看原文'"></button>
+                <div x-show="showTranscriptDetail" class="p-3 bg-surface-50 rounded-xl text-xs text-surface-500 whitespace-pre-wrap" x-text="savedTranscript"></div>
+                <div class="flex gap-2">
+                    <button @click="showCollectEdit=false" class="flex-1 h-10 border border-surface-200 rounded-xl text-sm">取消</button>
+                    <button @click="updateLastSaved()" class="flex-1 h-10 bg-gradient-brand text-white rounded-xl text-sm">保存修改</button>
                 </div>
             </div>
         </div>
-    </nav>
 
-    <!-- Settings Modal：模型选择 -->
-    <div x-show="showSettings" x-transition.opacity class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" @click.self="showSettings=false" style="display:none">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-fadeIn">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-douyin-gray-900">模型设置</h3>
-                <button @click="showSettings=false" class="w-8 h-8 rounded-full hover:bg-douyin-gray-100 flex items-center justify-center">✕</button>
+        <!-- ========== Library Tab ========== -->
+        <div x-show="tab === 'knowledge'" x-cloak>
+            <div class="relative mb-3">
+                <input x-model="kbSearch" type="search" placeholder="搜防水、报价、验收…"
+                       class="w-full h-11 pl-10 pr-4 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                <svg class="w-4 h-4 text-surface-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
-            <p class="text-sm text-douyin-gray-500 mb-4">API 密钥由服务端 <code class="text-xs bg-douyin-gray-100 px-1 rounded">.env</code> 配置，此处仅选择转写与理解模型。选择会保存在浏览器本地。</p>
-            <div x-show="!serverConfigured" class="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-xl">
-                服务端未检测到 API Key，请复制 <code class="text-xs">.env.example</code> 为 <code class="text-xs">.env</code> 并填入密钥后重启服务。
-            </div>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-medium text-douyin-gray-500 mb-1">语音转写模型 (ASR)</label>
-                    <select x-model="asrModel" class="w-full px-3 py-2.5 text-sm border border-douyin-gray-200 rounded-xl focus-ring bg-white">
-                        <template x-for="m in asrModels" :key="m.id">
-                            <option :value="m.id" x-text="m.name + (m.tier==='premium' ? ' ★' : '') + ' — ' + m.description"></option>
-                        </template>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-douyin-gray-500 mb-1">知识整理 / 问答模型 (LLM)</label>
-                    <select x-model="llmModel" class="w-full px-3 py-2.5 text-sm border border-douyin-gray-200 rounded-xl focus-ring bg-white">
-                        <template x-for="m in llmModels" :key="m.id">
-                            <option :value="m.id" x-text="m.name + (m.tier==='premium' ? ' ★高级' : '') + ' — ' + m.description"></option>
-                        </template>
-                    </select>
-                    <p class="text-xs text-douyin-gray-400 mt-1">★ 高级模型后续可能对付费用户开放，当前可直接选用。</p>
-                </div>
-            </div>
-            <div class="flex gap-3 mt-5">
-                <button @click="resetModels" class="flex-1 h-11 border border-douyin-gray-200 hover:bg-douyin-gray-50 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth">恢复默认</button>
-                <button @click="saveModels" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth">保存</button>
-            </div>
-        </div>
-    </div>
 
-    <!-- Edit Card Modal -->
-    <div x-show="showEdit" x-transition.opacity class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" @click.self="showEdit=false" style="display:none">
-        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 animate-fadeIn max-h-[90vh] overflow-y-auto" x-show="editCard">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-douyin-gray-900">编辑卡片</h3>
-                <button @click="showEdit=false" class="w-8 h-8 rounded-full hover:bg-douyin-gray-100 flex items-center justify-center">✕</button>
+            <div class="flex gap-2 overflow-x-auto chip-scroll pb-3 -mx-1 px-1">
+                <template x-for="s in stageChips" :key="s">
+                    <button @click="kbStageFilter = s"
+                            class="flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-smooth"
+                            :class="kbStageFilter === s ? 'bg-brand-500 text-white' : 'bg-white text-surface-600 border border-surface-200'"
+                            x-text="s"></button>
+                </template>
             </div>
-            <template x-if="editCard">
+
+            <div x-show="kbError" class="mb-3 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700" x-text="kbError"></div>
+
+            <!-- Skeleton -->
+            <div x-show="cardsLoading" class="space-y-3">
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+                <div class="skeleton h-24 rounded-2xl"></div>
+            </div>
+
+            <!-- Empty -->
+            <div x-show="!cardsLoading && filteredCards.length === 0" class="text-center py-16">
+                <p class="text-sm text-surface-400 mb-4" x-text="cards.length ? '没有匹配的知识' : '还没有知识'"></p>
+                <button @click="switchTab('extract')" class="h-10 px-5 bg-gradient-brand text-white text-sm rounded-xl">去收集第一个装修经验</button>
+            </div>
+
+            <!-- Card list -->
             <div class="space-y-3">
-                <div>
-                    <label class="block text-xs font-medium text-douyin-gray-500 mb-1">标题</label>
-                    <input x-model="editCard.title" class="w-full px-3 py-2 text-sm border border-douyin-gray-200 rounded-lg focus-ring">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-douyin-gray-500 mb-1">内容</label>
-                    <textarea x-model="editCard.raw_text" rows="8" class="w-full px-3 py-2 text-sm border border-douyin-gray-200 rounded-lg focus-ring resize-none"></textarea>
-                </div>
-                <div class="flex gap-3 pt-2">
-                    <button @click="showEdit=false" class="flex-1 h-11 border border-douyin-gray-200 hover:bg-douyin-gray-50 text-douyin-gray-700 font-medium text-sm rounded-xl">取消</button>
-                    <button @click="editSave()" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl">保存</button>
-                </div>
-            </div>
-            </template>
-        </div>
-    </div>
-
-    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-
-        <!-- ===================== Tab 1: 知识收集 ===================== -->
-        <div x-show="tab === 'extract'" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div class="lg:col-span-5 space-y-6">
-                <div class="bg-white rounded-2xl shadow-card p-6">
-                    <label class="block text-sm font-medium text-douyin-gray-700 mb-2">抖音分享链接</label>
-                    <textarea x-model="url" placeholder="粘贴抖音分享链接或整段分享文案" rows="4"
-                              class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring transition-smooth" :disabled="loading || kbBusy"></textarea>
-                    <button @click="transcribeLink" :disabled="!url.trim() || loading || kbBusy || !serverConfigured"
-                            class="mt-4 w-full h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50 shadow-lg shadow-douyin-red/20">
-                        转写
+                <template x-for="c in filteredCards" :key="c.id">
+                    <button @click="openDetail(c)"
+                            class="w-full text-left bg-white rounded-2xl shadow-card p-4 hover:shadow-md transition-smooth">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span x-show="c.stage" class="px-2 py-0.5 bg-brand-50 text-brand-600 rounded text-xs" x-text="c.stage"></span>
+                            <span x-show="c.video_id" class="px-2 py-0.5 bg-surface-100 text-surface-500 rounded text-xs">短视频</span>
+                        </div>
+                        <h4 class="font-medium text-surface-800" x-text="c.title || '装修知识'"></h4>
+                        <p class="text-sm text-surface-500 mt-1 line-clamp-2" x-text="c.raw_text"></p>
+                        <p class="text-xs text-surface-400 mt-2" x-text="formatDate(c.created_at)"></p>
                     </button>
-                    <p class="mt-3 text-xs text-douyin-gray-400">转写后自动整理为结构化知识；也可在右侧粘贴文案后点「AI 整理」。</p>
-                    <div x-show="!serverConfigured" @click="showSettings=true" class="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl cursor-pointer text-xs text-amber-800">转写需要服务端配置 API Key（.env），点击此处查看模型设置说明。</div>
-                </div>
-
-                <div x-show="loading" class="bg-white rounded-2xl shadow-card p-6 space-y-3">
-                    <div class="flex items-center justify-between text-sm">
-                        <span class="font-medium text-douyin-gray-900" x-text="loadingText"></span>
-                        <span class="text-douyin-gray-400" x-text="loadingProgress + '%'"></span>
-                    </div>
-                    <div class="h-2 bg-douyin-gray-100 rounded-full overflow-hidden">
-                        <div class="h-full bg-gradient-douyin transition-all duration-500 ease-out rounded-full" :style="'width:' + loadingProgress + '%'"></div>
-                    </div>
-                    <p class="text-xs text-douyin-gray-500" x-text="loadingMessage"></p>
-                </div>
-
-                <div x-show="collectError" class="bg-red-50 border border-red-100 rounded-2xl p-5 text-sm text-red-700" x-text="collectError" style="display:none"></div>
-
-                <div x-show="videoInfo" class="bg-white rounded-2xl shadow-card p-6">
-                    <p class="text-xs text-douyin-gray-400 mb-1">视频信息</p>
-                    <h3 class="font-medium text-douyin-gray-900 mb-3" x-text="videoInfo?.title"></h3>
-                    <p class="text-xs font-mono text-douyin-gray-500 mb-1" x-text="'ID: ' + (videoInfo?.video_id||'')"></p>
-                    <p x-show="videoInfo?.cache_hint" class="text-xs text-green-600 mb-3" x-text="videoInfo?.cache_hint"></p>
-                    <a x-show="videoInfo?.download_url" :href="`/api/video/download?url=${encodeURIComponent(videoInfo?.download_url)}&filename=${encodeURIComponent(videoInfo?.video_id||'video')}.mp4`"
-                       class="inline-flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg hover:bg-green-100">下载无水印视频</a>
-                </div>
-            </div>
-
-            <div class="lg:col-span-7">
-                <div class="bg-white rounded-2xl shadow-card overflow-hidden flex flex-col min-h-[360px]">
-                    <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between flex-wrap gap-2">
-                        <div>
-                            <span class="font-semibold text-douyin-gray-900">结构化知识</span>
-                            <p class="text-xs text-douyin-gray-400 mt-0.5">转写后自动整理，可编辑学习；入库仅保存</p>
-                        </div>
-                        <div class="flex items-center gap-2 flex-wrap justify-end">
-                            <button @click="structureKnowledge" :disabled="!structureSource.trim() || structuring || kbBusy || !serverConfigured"
-                                    class="h-9 px-3 border border-douyin-gray-200 hover:bg-douyin-gray-50 rounded-lg text-sm text-douyin-gray-700 disabled:opacity-50">AI 整理</button>
-                            <button @click="copyPreviewContent" :disabled="!previewContent.trim()" class="h-9 px-3 bg-douyin-gray-100 hover:bg-douyin-gray-200 rounded-lg text-sm text-douyin-gray-700 disabled:opacity-50">复制</button>
-                            <button @click="addToKnowledge" :disabled="!previewContent.trim() || kbBusy" class="h-9 px-3 bg-gradient-douyin hover:opacity-90 rounded-lg text-sm text-white disabled:opacity-50">入库</button>
-                        </div>
-                    </div>
-                    <div class="p-4 flex-1 flex flex-col space-y-3">
-                        <div>
-                            <label class="block text-xs font-medium text-douyin-gray-500 mb-1">标题</label>
-                            <input x-model="previewTitle" placeholder="结构化知识标题"
-                                   class="w-full px-4 py-2.5 text-sm border border-douyin-gray-200 rounded-xl focus-ring">
-                        </div>
-                        <div class="flex-1 flex flex-col min-h-[160px]">
-                            <label class="block text-xs font-medium text-douyin-gray-500 mb-1">内容 <span class="text-douyin-gray-400 font-normal">（整理后的知识，可编辑学习）</span></label>
-                            <textarea x-model="previewContent" rows="8" placeholder="转写完成后自动填入；也可手动编辑"
-                                      class="w-full flex-1 min-h-[160px] px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring text-douyin-gray-700 leading-relaxed"></textarea>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-douyin-gray-500 mb-1">原始文案 <span class="text-douyin-gray-400 font-normal">（转写原文或粘贴素材，供整理参考）</span></label>
-                            <textarea x-model="transcript" rows="5" placeholder="视频转写结果会显示在此；手动录入时可粘贴原始文案后点「AI 整理」"
-                                      class="w-full px-4 py-3 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring text-douyin-gray-600 leading-relaxed bg-douyin-gray-50/50"></textarea>
-                        </div>
-                    </div>
-                </div>
+                </template>
             </div>
         </div>
 
-        <!-- ===================== Tab 2: 知识库（仅整理） ===================== -->
-        <div x-show="tab === 'knowledge'" style="display:none">
-            <div class="bg-white rounded-2xl shadow-card overflow-hidden">
-                <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between">
-                    <div>
-                        <span class="font-semibold text-douyin-gray-900">知识卡片 <span class="text-douyin-gray-400 text-sm" x-text="'('+cards.length+')'"></span></span>
-                        <p class="text-xs text-douyin-gray-400 mt-0.5">编辑与删除已入库的知识</p>
+        <!-- ========== Ask Tab ========== -->
+        <div x-show="tab === 'chat'" class="flex flex-col chat-panel" x-cloak>
+            <div x-show="chatDocument" class="mb-2">
+                <div class="flex items-center gap-2 p-2.5 bg-brand-50 border border-brand-100 rounded-xl text-xs">
+                    <span>📎</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-medium text-surface-800 truncate" x-text="chatDocument?.filename"></p>
+                        <p class="text-surface-400">来自报价单 · <span x-text="(chatDocument?.char_count||0) + ' 字'"></span></p>
                     </div>
-                    <button @click="loadCards" class="text-sm text-douyin-gray-500 hover:text-douyin-red">刷新</button>
-                </div>
-
-                <div x-show="kbError" class="mx-6 mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700" x-text="kbError" style="display:none"></div>
-
-                <div class="p-4 space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
-                    <div x-show="cardsLoading" class="text-center text-sm text-douyin-gray-400 py-8">加载中…</div>
-                    <div x-show="!cardsLoading && cards.length===0" class="text-center text-sm text-douyin-gray-400 py-12">还没有卡片，请前往「知识收集」录入。</div>
-                    <template x-for="c in cards" :key="c.id">
-                        <div class="p-4 border border-douyin-gray-100 rounded-xl hover:shadow-card transition-smooth">
-                            <div class="flex items-start justify-between gap-2">
-                                <div class="min-w-0">
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <span x-show="c.video_id" class="px-2 py-0.5 bg-douyin-gray-100 text-douyin-gray-500 rounded text-xs">抖音</span>
-                                    </div>
-                                    <h4 class="font-medium text-douyin-gray-900 mt-1.5" x-text="c.title || '(无标题)'"></h4>
-                                </div>
-                                <div class="flex gap-1 flex-shrink-0">
-                                    <button @click="editOpen(c)" class="px-2 py-1 text-xs text-douyin-gray-600 hover:bg-douyin-gray-100 rounded">编辑</button>
-                                    <button @click="deleteCard(c.id)" class="px-2 py-1 text-xs text-red-500 hover:bg-red-50 rounded">删除</button>
-                                </div>
-                            </div>
-                            <p class="text-sm text-douyin-gray-500 mt-2 line-clamp-3" x-text="c.raw_text"></p>
-                        </div>
-                    </template>
+                    <button @click="removeChatDocument()" class="text-surface-400 hover:text-red-500 px-1">移除</button>
                 </div>
             </div>
-        </div>
 
-        <!-- ===================== Tab 3: 问答 ===================== -->
-        <div x-show="tab === 'chat'" class="max-w-3xl mx-auto" style="display:none">
-            <div class="bg-white rounded-2xl shadow-card flex flex-col" style="height: calc(100vh - 220px); min-height: 420px;">
-                <div class="px-6 py-4 border-b border-douyin-gray-100 flex items-center justify-between">
-                    <span class="font-semibold text-douyin-gray-900">基于知识库问答</span>
-                    <button @click="clearChat" x-show="messages.length || chatDocument" class="text-sm text-douyin-gray-500 hover:text-douyin-red">清空</button>
-                </div>
-
-                <!-- 已上传文件 -->
-                <div x-show="chatDocument" class="px-4 pt-3">
-                    <div class="flex items-center gap-2 p-2.5 bg-douyin-gray-50 border border-douyin-gray-100 rounded-xl text-xs">
-                        <span class="text-douyin-gray-500">📎</span>
-                        <div class="flex-1 min-w-0">
-                            <p class="font-medium text-douyin-gray-800 truncate" x-text="chatDocument?.filename"></p>
-                            <p class="text-douyin-gray-400" x-text="(chatDocument?.char_count||0) + ' 字' + (chatDocument?.truncated ? '（已截断）' : '')"></p>
-                        </div>
-                        <button @click="removeChatDocument" class="text-douyin-gray-400 hover:text-red-500 px-1">移除</button>
+            <div class="flex-1 overflow-y-auto space-y-3 min-h-0" x-ref="chatBox">
+                <!-- Quick questions -->
+                <div x-show="messages.length === 0 && !chatDocument" class="py-4">
+                    <p class="text-sm text-surface-500 mb-3">试试这些问题：</p>
+                    <div class="space-y-2">
+                        <template x-for="q in quickQuestions" :key="q">
+                            <button @click="askQuick(q)"
+                                    class="w-full text-left px-4 py-3 bg-white border border-surface-200 rounded-xl text-sm text-surface-700 hover:border-brand-300 hover:bg-brand-50 transition-smooth"
+                                    x-text="q"></button>
+                        </template>
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto p-4 space-y-4" x-ref="chatBox">
-                    <div x-show="messages.length===0 && !chatDocument" class="h-full flex flex-col items-center justify-center text-center text-douyin-gray-400">
-                        <p class="text-sm max-w-xs">向你的装修知识库提问；可上传装修公司报价单（PDF/Excel）结合知识库进行合同审查。</p>
-                    </div>
-                    <template x-for="(m, idx) in messages" :key="idx">
-                        <div :class="m.role==='user' ? 'flex justify-end' : 'flex justify-start'">
-                            <div class="max-w-[85%]">
-                                <!-- 无依据黄色警告条 -->
-                                <div x-show="m.role==='assistant' && !m.pending && m.grounded===false"
-                                     class="mb-1.5 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-                                    以下回答未基于你的个人知识库
-                                </div>
-                                <div class="px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
-                                     :class="m.role==='user' ? 'bg-gradient-douyin text-white' : (m.error ? 'bg-red-50 text-red-700' : 'bg-douyin-gray-100 text-douyin-gray-800')">
-                                    <span x-show="m.pending" class="text-douyin-gray-400">思考中…</span>
-                                    <span x-show="!m.pending" x-text="m.content"></span>
-                                </div>
-                                <!-- 引用 -->
-                                <div x-show="m.role==='assistant' && m.citations && m.citations.length" class="mt-2">
-                                    <button @click="m.showCite=!m.showCite" class="text-xs text-douyin-gray-400 hover:text-douyin-gray-600" x-text="(m.showCite?'收起':'查看')+' 引用('+(m.citations?.length||0)+')'"></button>
-                                    <div x-show="m.showCite" class="mt-1.5 space-y-1.5">
-                                        <template x-for="cit in m.citations" :key="cit.id">
-                                            <div class="p-2.5 bg-douyin-gray-50 border border-douyin-gray-100 rounded-lg">
-                                                <div class="flex items-center gap-2">
-                                                    <span class="text-xs font-medium text-douyin-gray-800" x-text="cit.title||'(无标题)'"></span>
-                                                </div>
-                                                <p class="text-xs text-douyin-gray-500 mt-1 line-clamp-3" x-text="cit.excerpt"></p>
-                                            </div>
-                                        </template>
-                                    </div>
+                <template x-for="(m, idx) in messages" :key="idx">
+                    <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+                        <div class="max-w-[88%]">
+                            <!-- Grounded badge -->
+                            <div x-show="m.role === 'assistant' && !m.pending && m.grounded && m.citations?.length"
+                                 class="mb-1.5 inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
+                                <span>✓</span> 来自你的知识库
+                            </div>
+                            <!-- Ungrounded warning -->
+                            <div x-show="m.role === 'assistant' && !m.pending && m.grounded === false"
+                                 class="mb-1.5 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                                这条回答没有找到你的知识依据，仅供参考
+                            </div>
+                            <!-- Document badge -->
+                            <div x-show="m.role === 'assistant' && !m.pending && m.hasDocument"
+                                 class="mb-1.5 inline-flex items-center gap-1 px-2 py-1 bg-brand-50 text-brand-700 rounded-lg text-xs font-medium">
+                                结合了上传的报价单
+                            </div>
+                            <div class="px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
+                                 :class="m.role === 'user' ? 'bg-gradient-brand text-white' : (m.error ? 'bg-red-50 text-red-700' : 'bg-white border border-surface-200 text-surface-800')">
+                                <span x-show="m.pending" class="text-surface-400">正在思考…</span>
+                                <span x-show="!m.pending" x-text="m.content"></span>
+                            </div>
+                            <div x-show="m.role === 'assistant' && m.citations?.length" class="mt-1.5">
+                                <button @click="m.showCite = !m.showCite"
+                                        class="text-xs text-brand-600 hover:text-brand-700"
+                                        x-text="(m.showCite ? '收起' : '查看') + '依据 (' + m.citations.length + ')'"></button>
+                                <div x-show="m.showCite" class="mt-1.5 space-y-1.5">
+                                    <template x-for="cit in m.citations" :key="cit.id">
+                                        <div class="p-2.5 bg-surface-50 border border-surface-200 rounded-lg">
+                                            <span class="text-xs font-medium text-surface-800" x-text="cit.title || '装修知识'"></span>
+                                            <p class="text-xs text-surface-500 mt-1 line-clamp-3" x-text="cit.excerpt"></p>
+                                        </div>
+                                    </template>
                                 </div>
                             </div>
                         </div>
-                    </template>
-                </div>
-
-                <div class="p-3 border-t border-douyin-gray-100 space-y-2">
-                    <input type="file" x-ref="chatFileInput" class="hidden" accept=".pdf,.xlsx,.xlsm,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="uploadChatDocument($event)">
-                    <div class="flex items-end gap-2">
-                        <button @click="$refs.chatFileInput.click()" :disabled="chatDocUploading || chatLoading"
-                                class="h-11 w-11 flex-shrink-0 border border-douyin-gray-200 hover:bg-douyin-gray-50 rounded-xl text-douyin-gray-600 disabled:opacity-50" title="上传报价单 PDF/Excel">
-                            <span x-show="!chatDocUploading">📎</span>
-                            <span x-show="chatDocUploading" class="text-xs">…</span>
-                        </button>
-                        <textarea x-model="chatInput" @keydown.enter.prevent="sendChat()" rows="1" placeholder="输入问题，如：这份报价单有哪些风险？"
-                                  class="flex-1 px-4 py-2.5 text-sm border border-douyin-gray-200 rounded-xl resize-none focus-ring max-h-32" :disabled="chatLoading"></textarea>
-                        <button @click="sendChat()" :disabled="!chatInput.trim() || chatLoading" class="h-11 px-5 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth disabled:opacity-50">发送</button>
                     </div>
-                    <p x-show="chatDocError" class="text-xs text-red-600" x-text="chatDocError"></p>
+                </template>
+            </div>
+
+            <div class="pt-2 mt-auto border-t border-surface-200">
+                <input type="file" x-ref="chatFileInput" class="hidden"
+                       accept=".pdf,.xlsx,.xlsm,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                       @change="uploadChatDocument($event)">
+                <div class="flex items-end gap-2">
+                    <button @click="$refs.chatFileInput.click()" :disabled="chatDocUploading || chatLoading"
+                            class="h-11 w-11 flex-shrink-0 border border-surface-200 hover:bg-surface-50 rounded-xl text-surface-600 disabled:opacity-50"
+                            title="上传报价单">
+                        <span x-show="!chatDocUploading">📎</span>
+                        <span x-show="chatDocUploading" class="text-xs">…</span>
+                    </button>
+                    <textarea x-model="chatInput" @keydown.enter.prevent="sendChat()" rows="1"
+                              placeholder="输入你的装修问题"
+                              class="flex-1 px-4 py-2.5 text-sm border border-surface-200 rounded-xl resize-none focus-ring max-h-28 bg-white"
+                              :disabled="chatLoading"></textarea>
+                    <button @click="sendChat()" :disabled="!chatInput.trim() || chatLoading"
+                            class="h-11 px-4 bg-gradient-brand text-white font-medium text-sm rounded-xl disabled:opacity-50">发送</button>
                 </div>
+                <p x-show="chatDocError" class="text-xs text-red-600 mt-1" x-text="chatDocError"></p>
             </div>
         </div>
     </main>
 
+    <!-- ========== Bottom Tab Bar ========== -->
+    <nav class="bottom-nav">
+        <div class="max-w-lg mx-auto h-16 flex items-stretch">
+            <template x-for="t in tabs" :key="t.id">
+                <button @click="switchTab(t.id)"
+                        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-smooth"
+                        :class="tab === t.id ? 'text-brand-600' : 'text-surface-400'">
+                    <span class="text-lg" x-html="t.icon"></span>
+                    <span class="text-xs font-medium" x-text="t.label"></span>
+                </button>
+            </template>
+        </div>
+    </nav>
+
+    <!-- ========== Modals / Sheets ========== -->
+
+    <!-- Advanced Settings -->
+    <div x-show="showSettings" x-transition.opacity
+         class="fixed inset-0 z-50 sheet-backdrop flex items-end sm:items-center justify-center"
+         @click.self="showSettings=false" style="display:none">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-5 animate-fadeIn max-h-[85vh] overflow-y-auto"
+             style="padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px))">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-surface-800">高级设置</h3>
+                <button @click="showSettings=false" class="w-8 h-8 rounded-full hover:bg-surface-100 flex items-center justify-center text-surface-500">✕</button>
+            </div>
+            <div x-show="!serverConfigured" class="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-xl">
+                服务还没连接好。管理员需在服务端配置密钥后重启服务。
+            </div>
+            <details class="mb-4 text-xs text-surface-400">
+                <summary class="cursor-pointer text-surface-500">查看技术说明</summary>
+                <p class="mt-2">密钥在服务端 <code class="bg-surface-100 px-1 rounded">.env</code> 配置，普通用户无需操作。</p>
+            </details>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-surface-500 mb-1">视频内容读取方式</label>
+                    <select x-model="asrModel" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                        <template x-for="m in asrModels" :key="m.id">
+                            <option :value="m.id" x-text="m.name + ' — ' + m.description"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-surface-500 mb-1">知识整理方式</label>
+                    <select x-model="llmModel" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                        <template x-for="m in llmModels" :key="m.id">
+                            <option :value="m.id" x-text="m.name + ' — ' + m.description"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5">
+                <button @click="resetModels()" class="flex-1 h-11 border border-surface-200 rounded-xl text-sm text-surface-700">恢复默认</button>
+                <button @click="saveModels()" class="flex-1 h-11 bg-gradient-brand text-white rounded-xl text-sm">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Detail Sheet -->
+    <div x-show="showDetail" x-transition.opacity
+         class="fixed inset-0 z-50 sheet-backdrop flex items-end justify-center"
+         @click.self="closeDetail()" style="display:none">
+        <div class="bg-white rounded-t-2xl w-full max-w-lg animate-fadeIn max-h-[80vh] overflow-y-auto"
+             style="padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px))" x-show="detailCard">
+            <div class="sticky top-0 bg-white border-b border-surface-100 px-5 py-4 flex items-center justify-between">
+                <h3 class="font-semibold text-surface-800" x-text="detailEditing ? '编辑知识' : '知识详情'"></h3>
+                <button @click="closeDetail()" class="w-8 h-8 rounded-full hover:bg-surface-100 flex items-center justify-center">✕</button>
+            </div>
+            <div class="p-5 space-y-3" x-show="detailCard">
+                <template x-if="!detailEditing">
+                    <div class="space-y-3">
+                        <div class="flex gap-2 flex-wrap">
+                            <span x-show="detailCard?.stage" class="px-2 py-0.5 bg-brand-50 text-brand-600 rounded text-xs" x-text="detailCard?.stage"></span>
+                            <span x-show="detailCard?.video_id" class="px-2 py-0.5 bg-surface-100 text-surface-500 rounded text-xs">来自短视频</span>
+                        </div>
+                        <h4 class="text-lg font-medium text-surface-800" x-text="detailCard?.title || '装修知识'"></h4>
+                        <p class="text-sm text-surface-600 whitespace-pre-wrap leading-relaxed" x-text="detailCard?.raw_text"></p>
+                        <p class="text-xs text-surface-400" x-text="'保存于 ' + formatDate(detailCard?.created_at)"></p>
+                        <div class="flex gap-2 pt-2">
+                            <button @click="detailEditing=true" class="flex-1 h-11 border border-surface-200 rounded-xl text-sm">编辑</button>
+                            <button @click="deleteFromDetail()" class="flex-1 h-11 border border-red-200 text-red-600 rounded-xl text-sm">删除</button>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="detailEditing">
+                    <div class="space-y-3">
+                        <input x-model="detailCard.title" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring">
+                        <textarea x-model="detailCard.raw_text" rows="8" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl resize-none focus-ring"></textarea>
+                        <div class="flex gap-2">
+                            <button @click="detailEditing=false" class="flex-1 h-11 border border-surface-200 rounded-xl text-sm">取消</button>
+                            <button @click="saveDetail()" class="flex-1 h-11 bg-gradient-brand text-white rounded-xl text-sm">保存</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
-    <div x-show="toast" x-transition class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" style="display:none">
-        <div class="px-4 py-3 bg-douyin-gray-900 text-white text-sm rounded-xl shadow-2xl" x-text="toast"></div>
+    <div x-show="toast" x-transition
+         class="fixed left-1/2 -translate-x-1/2 z-50"
+         style="bottom: calc(80px + env(safe-area-inset-bottom, 0px)); display:none">
+        <div class="px-4 py-3 bg-surface-800 text-white text-sm rounded-xl shadow-2xl" x-text="toast"></div>
     </div>
 
     <script>
         function renoApp() {
             return {
-                // 通用
+                // --- Shell ---
                 tab: 'extract',
-                tabs: [ {id:'extract',label:'知识收集'}, {id:'knowledge',label:'知识库'}, {id:'chat',label:'问答'} ],
+                tabs: [
+                    { id: 'extract', label: '收集', icon: '&#128229;' },
+                    { id: 'knowledge', label: '知识库', icon: '&#128218;' },
+                    { id: 'chat', label: '问答', icon: '&#128172;' },
+                ],
                 toast: '',
                 showSettings: false,
                 serverConfigured: false,
                 llmModel: '', asrModel: '',
                 defaultLlmModel: '', defaultAsrModel: '',
                 llmModels: [], asrModels: [],
-                // 知识收集
-                url:'', previewTitle:'', previewContent:'', transcript:'',
-                videoId:null, sourceUrl:'',
-                loading:false, structuring:false, loadingText:'', loadingMessage:'', loadingProgress:0,
-                collectError:'', videoInfo:null, kbBusy:false,
 
-                get structureSource(){ return (this.transcript||this.previewContent||'').trim(); },
-                // 知识库
-                cards:[], cardsLoading:false, kbLoaded:false, kbError:'',
-                showEdit:false, editCard:null,
-                // 问答
-                messages:[], chatInput:'', chatLoading:false,
-                chatDocument:null, chatDocUploading:false, chatDocError:'',
+                // --- Collect ---
+                collectInput: '',
+                collectBusy: false,
+                collectError: '',
+                collectStep: 0,
+                collectProgress: 0,
+                collectSteps: ['正在读取视频', '正在整理重点', '已保存'],
+                lastSavedCard: null,
+                lastSavedCardId: null,
+                showCollectEdit: false,
+                editPreviewTitle: '',
+                editPreviewContent: '',
+                savedTranscript: '',
+                showTranscript: false,
+                showTranscriptDetail: false,
+                videoId: null,
+                sourceUrl: '',
 
-                get modelPayload(){
-                    const p={};
-                    if(this.llmModel) p.llm_model=this.llmModel;
-                    if(this.asrModel) p.asr_model=this.asrModel;
+                // --- Library ---
+                cards: [],
+                cardsLoading: false,
+                kbLoaded: false,
+                kbError: '',
+                kbSearch: '',
+                kbStageFilter: '全部',
+                stageChips: ['全部', '水电', '防水', '泥木', '油漆', '验收', '其他'],
+                showDetail: false,
+                detailCard: null,
+                detailEditing: false,
+
+                // --- Ask ---
+                messages: [],
+                chatInput: '',
+                chatLoading: false,
+                chatDocument: null,
+                chatDocUploading: false,
+                chatDocError: '',
+                quickQuestions: [
+                    '卫生间防水要注意什么？',
+                    '帮我看报价单有没有漏项',
+                    '水电验收要检查哪些地方？',
+                ],
+
+                get modelPayload() {
+                    const p = {};
+                    if (this.llmModel) p.llm_model = this.llmModel;
+                    if (this.asrModel) p.asr_model = this.asrModel;
                     return p;
                 },
 
-                init(){
-                    const lm=localStorage.getItem('reno_llm_model');
-                    const am=localStorage.getItem('reno_asr_model');
-                    if(lm) this.llmModel=lm;
-                    if(am) this.asrModel=am;
+                get filteredCards() {
+                    let list = this.cards;
+                    if (this.kbStageFilter !== '全部') {
+                        if (this.kbStageFilter === '其他') {
+                            const known = ['水电', '防水', '泥木', '油漆', '验收'];
+                            list = list.filter(c => !known.some(k => (c.stage || '').includes(k)));
+                        } else {
+                            list = list.filter(c => (c.stage || '').includes(this.kbStageFilter));
+                        }
+                    }
+                    const q = this.kbSearch.trim().toLowerCase();
+                    if (q) {
+                        list = list.filter(c =>
+                            (c.title || '').toLowerCase().includes(q) ||
+                            (c.raw_text || '').toLowerCase().includes(q)
+                        );
+                    }
+                    return list;
+                },
+
+                init() {
+                    const lm = localStorage.getItem('reno_llm_model');
+                    const am = localStorage.getItem('reno_asr_model');
+                    if (lm) this.llmModel = lm;
+                    if (am) this.asrModel = am;
                     this.loadConfig();
-                    if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.register('/sw.js').catch(() => {});
+                    }
                 },
-                async loadConfig(){
-                    try{
-                        const r=await fetch('/api/config');
-                        const d=await r.json();
-                        this.serverConfigured=!!d.api_key_configured;
-                        this.llmModels=d.llm_models||[];
-                        this.asrModels=d.asr_models||[];
-                        this.defaultLlmModel=d.defaults?.llm_model||'';
-                        this.defaultAsrModel=d.defaults?.asr_model||'';
-                        if(!this.llmModel) this.llmModel=this.defaultLlmModel;
-                        if(!this.asrModel) this.asrModel=this.defaultAsrModel;
-                    }catch(e){}
+
+                async loadConfig() {
+                    try {
+                        const r = await fetch('/api/config');
+                        const d = await r.json();
+                        this.serverConfigured = !!d.api_key_configured;
+                        this.llmModels = d.llm_models || [];
+                        this.asrModels = d.asr_models || [];
+                        this.defaultLlmModel = d.defaults?.llm_model || '';
+                        this.defaultAsrModel = d.defaults?.asr_model || '';
+                        if (!this.llmModel) this.llmModel = this.defaultLlmModel;
+                        if (!this.asrModel) this.asrModel = this.defaultAsrModel;
+                    } catch (e) {}
                 },
-                async checkHealth(){
-                    try{ const r=await fetch('/api/health'); const d=await r.json(); this.serverConfigured=!!d.api_key_configured; }catch(e){}
+
+                switchTab(t) {
+                    this.tab = t;
+                    if (t === 'knowledge' && !this.kbLoaded) {
+                        this.loadCards();
+                        this.kbLoaded = true;
+                    }
                 },
-                switchTab(t){ this.tab=t; if(t==='knowledge' && !this.kbLoaded){ this.loadCards(); this.kbLoaded=true; } },
-                showToast(m){ this.toast=m; setTimeout(()=>this.toast='',2200); },
-                saveModels(){
+
+                showToast(m) {
+                    this.toast = m;
+                    setTimeout(() => this.toast = '', 2200);
+                },
+
+                saveModels() {
                     localStorage.setItem('reno_llm_model', this.llmModel);
                     localStorage.setItem('reno_asr_model', this.asrModel);
-                    this.showSettings=false;
-                    this.showToast('模型设置已保存');
+                    this.showSettings = false;
+                    this.showToast('设置已保存');
                 },
-                resetModels(){
-                    this.llmModel=this.defaultLlmModel;
-                    this.asrModel=this.defaultAsrModel;
+
+                resetModels() {
+                    this.llmModel = this.defaultLlmModel;
+                    this.asrModel = this.defaultAsrModel;
                     localStorage.removeItem('reno_llm_model');
                     localStorage.removeItem('reno_asr_model');
-                    this.showToast('已恢复默认模型');
+                    this.showToast('已恢复默认');
                 },
 
-                // ---------- 知识收集 ----------
-                async transcribeLink(){
-                    if(!this.url.trim()||this.loading) return;
-                    if(!this.serverConfigured){ this.showSettings=true; this.collectError='请先在服务端 .env 配置 API_KEY'; return; }
-                    this.collectError=''; this.transcript='';
-                    this.previewTitle=''; this.previewContent=''; this.videoId=null; this.sourceUrl='';
-                    this.loading=true; this.loadingProgress=0;
-                    this.loadingText='转写中'; this.loadingMessage='已提交任务…';
-                    try{
-                        const r=await fetch('/api/video/extract',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:this.url,...this.modelPayload})});
-                        const d=await r.json();
-                        if(!r.ok||!d.success){ this.collectError=d.detail||'提交失败'; this.loading=false; return; }
-                        this.pollExtractTask(d.task_id);
-                    }catch(e){ this.collectError='网络错误'; this.loading=false; }
+                formatDate(iso) {
+                    if (!iso) return '';
+                    try {
+                        return new Date(iso).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                    } catch (e) { return ''; }
                 },
-                pollExtractTask(taskId){
-                    const tick=async()=>{
-                        try{
-                            const r=await fetch('/api/video/extract/task/'+taskId);
-                            const d=await r.json();
-                            const t=d.task;
-                            if(!t){ this.collectError='任务不存在'; this.loading=false; return; }
-                            this.loadingProgress=t.progress||0;
-                            this.loadingText=t.phase||'处理中';
-                            this.loadingMessage=t.message||'';
-                            if(t.status==='failed'){
-                                this.collectError=t.error||'转写失败';
-                                this.loading=false; return;
+
+                isLikelyLink(text) {
+                    return /douyin\.com|iesdouyin\.com|v\.douyin/i.test(text);
+                },
+
+                friendlyError(msg) {
+                    const s = (msg || '').toString();
+                    if (/index out of range|链接|解析|过期|无效/i.test(s))
+                        return '链接可能过期了，试试重新复制分享链接';
+                    if (/API|Key|配置|密钥/i.test(s))
+                        return '服务还没连接好，请先完成一次初始化';
+                    if (/已入库|duplicate|409/i.test(s))
+                        return '这条内容已经保存过了，可在知识库中查看';
+                    return s || '保存失败，请稍后再试';
+                },
+
+                mapExtractPhase(status) {
+                    if (['pending', 'parsing', 'downloading', 'extracting_audio', 'transcribing', 'extracting'].includes(status))
+                        return 0;
+                    if (status === 'structuring') return 1;
+                    return 0;
+                },
+
+                // --- Collect: one-click save ---
+                async saveToKnowledge() {
+                    const input = this.collectInput.trim();
+                    if (!input || this.collectBusy) return;
+                    if (!this.serverConfigured) {
+                        this.collectError = '服务还没连接好，请先完成一次初始化';
+                        return;
+                    }
+
+                    this.collectBusy = true;
+                    this.collectError = '';
+                    this.collectStep = 0;
+                    this.collectProgress = 5;
+                    this.lastSavedCard = null;
+                    this.showCollectEdit = false;
+
+                    try {
+                        if (this.isLikelyLink(input)) {
+                            await this.extractAndSave(input);
+                        } else {
+                            this.collectSteps = ['正在整理重点', '已保存'];
+                            this.collectStep = 0;
+                            await this.structureAndSave(input);
+                        }
+                    } catch (e) {
+                        this.collectError = this.friendlyError(e.message || e);
+                    } finally {
+                        this.collectBusy = false;
+                    }
+                },
+
+                async extractAndSave(url) {
+                    this.collectSteps = ['正在读取视频', '正在整理重点', '已保存'];
+                    this.collectStep = 0;
+                    this.collectProgress = 10;
+
+                    const r = await fetch('/api/video/extract', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url, ...this.modelPayload }),
+                    });
+                    const d = await r.json();
+                    if (!r.ok || !d.success) throw new Error(d.detail || '读取失败');
+
+                    const preview = await this.pollExtract(d.task_id);
+                    this.collectStep = 1;
+                    this.collectProgress = 75;
+
+                    const card = await this.savePreview({
+                        title: preview.title,
+                        content: preview.content,
+                        video_id: preview.video_id,
+                        source_url: preview.source_url || url,
+                        transcript: preview.transcript,
+                    });
+
+                    this.collectStep = 2;
+                    this.collectProgress = 100;
+                    this.finishCollectSuccess(card, preview.transcript);
+                    this.collectInput = '';
+                },
+
+                pollExtract(taskId) {
+                    return new Promise((resolve, reject) => {
+                        const tick = async () => {
+                            try {
+                                const r = await fetch('/api/video/extract/task/' + taskId);
+                                const d = await r.json();
+                                const t = d.task;
+                                if (!t) { reject(new Error('任务不存在')); return; }
+
+                                this.collectProgress = Math.max(this.collectProgress, t.progress || 10);
+                                this.collectStep = this.mapExtractPhase(t.status);
+                                if (t.status === 'structuring') this.collectStep = 1;
+
+                                if (t.status === 'failed') {
+                                    reject(new Error(t.error || '读取失败'));
+                                    return;
+                                }
+                                if (t.status === 'done') {
+                                    const p = t.preview || {};
+                                    resolve({
+                                        title: p.title || '',
+                                        content: p.content || '',
+                                        transcript: p.transcript || '',
+                                        video_id: p.video_id || null,
+                                        source_url: p.source_url || '',
+                                    });
+                                    return;
+                                }
+                            } catch (e) { /* retry */ }
+                            setTimeout(tick, 1000);
+                        };
+                        tick();
+                    });
+                },
+
+                async structureAndSave(text) {
+                    this.collectProgress = 30;
+                    const r = await fetch('/api/cards/structure', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, ...this.modelPayload }),
+                    });
+                    const d = await r.json();
+                    if (!r.ok || !d.success) throw new Error(d.detail || '整理失败');
+
+                    this.collectStep = 1;
+                    this.collectProgress = 70;
+
+                    const card = await this.savePreview({
+                        title: d.preview?.title || '',
+                        content: d.preview?.content || text,
+                        transcript: text,
+                    });
+
+                    this.collectProgress = 100;
+                    this.finishCollectSuccess(card, text);
+                    this.collectInput = '';
+                },
+
+                async savePreview({ title, content, video_id, source_url, transcript }) {
+                    const r = await fetch('/api/cards/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title, content,
+                            video_id: video_id || null,
+                            source_url: source_url || null,
+                            transcript: transcript || null,
+                        }),
+                    });
+                    const d = await r.json();
+                    if (!r.ok || !d.success) throw new Error(d.detail || '保存失败');
+                    this.kbLoaded = false;
+                    return d.card;
+                },
+
+                finishCollectSuccess(card, transcript) {
+                    this.lastSavedCard = card;
+                    this.lastSavedCardId = card?.id;
+                    this.savedTranscript = transcript || '';
+                    this.showTranscript = !!transcript;
+                    this.videoId = card?.video_id || null;
+                    this.sourceUrl = card?.source_url || '';
+                    this.showToast('已保存到知识库');
+                },
+
+                openCollectEdit() {
+                    this.editPreviewTitle = this.lastSavedCard?.title || '';
+                    this.editPreviewContent = this.lastSavedCard?.raw_text || '';
+                    this.showCollectEdit = true;
+                },
+
+                async updateLastSaved() {
+                    if (!this.lastSavedCardId) return;
+                    try {
+                        const r = await fetch('/api/cards/' + this.lastSavedCardId, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: this.editPreviewTitle,
+                                raw_text: this.editPreviewContent,
+                            }),
+                        });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            this.lastSavedCard = { ...this.lastSavedCard, title: this.editPreviewTitle, raw_text: this.editPreviewContent };
+                            this.showCollectEdit = false;
+                            this.kbLoaded = false;
+                            this.showToast('修改已保存');
+                        } else {
+                            this.showToast(d.detail || '保存失败');
+                        }
+                    } catch (e) {
+                        this.showToast('网络错误');
+                    }
+                },
+
+                // --- Library ---
+                async loadCards() {
+                    this.cardsLoading = true;
+                    this.kbError = '';
+                    try {
+                        const r = await fetch('/api/cards');
+                        const d = await r.json();
+                        this.cards = d.cards || [];
+                    } catch (e) {
+                        this.kbError = '加载失败，请下拉刷新重试';
+                    } finally {
+                        this.cardsLoading = false;
+                    }
+                },
+
+                openDetail(c) {
+                    this.detailCard = { ...c };
+                    this.detailEditing = false;
+                    this.showDetail = true;
+                },
+
+                closeDetail() {
+                    this.showDetail = false;
+                    this.detailCard = null;
+                    this.detailEditing = false;
+                },
+
+                async saveDetail() {
+                    try {
+                        const r = await fetch('/api/cards/' + this.detailCard.id, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: this.detailCard.title,
+                                raw_text: this.detailCard.raw_text,
+                            }),
+                        });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            this.showToast('已保存');
+                            this.detailEditing = false;
+                            await this.loadCards();
+                            this.closeDetail();
+                        } else {
+                            this.showToast(d.detail || '保存失败');
+                        }
+                    } catch (e) {
+                        this.showToast('网络错误');
+                    }
+                },
+
+                async deleteFromDetail() {
+                    if (!confirm('确定删除这条知识？')) return;
+                    try {
+                        const r = await fetch('/api/cards/' + this.detailCard.id, { method: 'DELETE' });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            this.showToast('已删除');
+                            await this.loadCards();
+                            this.closeDetail();
+                        } else {
+                            this.showToast('删除失败');
+                        }
+                    } catch (e) {
+                        this.showToast('网络错误');
+                    }
+                },
+
+                // --- Ask ---
+                askQuick(q) {
+                    this.chatInput = q;
+                    this.sendChat();
+                },
+
+                clearChat() {
+                    this.messages = [];
+                    this.chatDocument = null;
+                    this.chatDocError = '';
+                },
+
+                removeChatDocument() {
+                    this.chatDocument = null;
+                    this.chatDocError = '';
+                },
+
+                async uploadChatDocument(ev) {
+                    const file = ev.target.files?.[0];
+                    if (!file) return;
+                    this.chatDocError = '';
+                    this.chatDocUploading = true;
+                    try {
+                        const fd = new FormData();
+                        fd.append('file', file);
+                        const r = await fetch('/api/documents/parse', { method: 'POST', body: fd });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            this.chatDocument = {
+                                filename: d.filename,
+                                text: d.text,
+                                char_count: d.char_count,
+                                truncated: d.truncated,
+                            };
+                            this.showToast('报价单已上传');
+                            if (!this.chatInput.trim()) {
+                                this.chatInput = '帮我看报价单有没有漏项';
                             }
-                            if(t.status==='done'){
-                                this.loading=false;
-                                const p=t.preview||{};
-                                this.previewTitle=p.title||'';
-                                this.previewContent=p.content||'';
-                                this.transcript=p.transcript||'';
-                                this.videoId=p.video_id||null;
-                                this.sourceUrl=p.source_url||this.url;
-                                const hints=[];
-                                if(t.cached_video) hints.push('视频已缓存');
-                                this.videoInfo={
-                                    video_id:p.video_id,
-                                    title:p.video_title,
-                                    download_url:p.download_url,
-                                    cache_hint:hints.length?('⚡ '+hints.join(' · ')):''
-                                };
-                                this.showToast('转写与整理完成，请编辑后入库');
-                                return;
-                            }
-                        }catch(e){}
-                        setTimeout(tick,1000);
-                    };
-                    tick();
-                },
-                async structureKnowledge(){
-                    const text=this.structureSource;
-                    if(!text||this.structuring) return;
-                    if(!this.serverConfigured){ this.showSettings=true; this.collectError='请先在服务端 .env 配置 API_KEY'; return; }
-                    this.structuring=true; this.collectError='';
-                    try{
-                        const r=await fetch('/api/cards/structure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-                            text, hint_title:this.previewTitle||this.videoInfo?.title||'', ...this.modelPayload
-                        })});
-                        const d=await r.json();
-                        if(r.ok&&d.success){
-                            this.previewTitle=d.preview.title||'';
-                            this.previewContent=d.preview.content||'';
-                            if(!this.transcript.trim() && text) this.transcript=text;
-                            this.showToast('整理完成，可继续编辑');
-                        } else { this.collectError=d.detail||'整理失败'; }
-                    }catch(e){ this.collectError='网络错误'; } finally{ this.structuring=false; }
-                },
-                async copyPreviewContent(){ try{ await navigator.clipboard.writeText(this.previewContent); this.showToast('已复制'); }catch(e){ this.showToast('复制失败'); } },
-                async addToKnowledge(){
-                    const content=(this.previewContent||'').trim();
-                    if(!content||this.kbBusy) return;
-                    this.kbBusy=true; this.collectError='';
-                    try{
-                        const r=await fetch('/api/cards/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-                            title:this.previewTitle, content,
-                            video_id:this.videoId||null,
-                            source_url:this.sourceUrl||null,
-                            transcript:this.transcript||null,
-                        })});
-                        const d=await r.json();
-                        if(r.ok&&d.success){
-                            this.showToast('已入库');
-                            this.kbLoaded=false;
-                            this.videoId=null;
-                            this.previewTitle=''; this.previewContent=''; this.transcript='';
-                            this.videoInfo=null; this.sourceUrl='';
-                        } else { this.collectError=d.detail||'入库失败'; }
-                    }catch(e){ this.collectError='网络错误'; } finally{ this.kbBusy=false; }
+                        } else {
+                            this.chatDocError = d.detail || '文件读取失败';
+                        }
+                    } catch (e) {
+                        this.chatDocError = '上传失败';
+                    } finally {
+                        this.chatDocUploading = false;
+                        ev.target.value = '';
+                    }
                 },
 
-                // ---------- 知识库 ----------
-                async loadCards(){
-                    this.cardsLoading=true; this.kbError='';
-                    try{ const r=await fetch('/api/cards'); const d=await r.json();
-                        this.cards=d.cards||[]; }
-                    catch(e){ this.kbError='加载卡片失败'; } finally{ this.cardsLoading=false; }
-                },
-                editOpen(c){ this.editCard={ id:c.id, title:c.title||'', raw_text:c.raw_text||'' }; this.showEdit=true; },
-                async editSave(){
-                    try{ const b={ title:this.editCard.title, raw_text:this.editCard.raw_text };
-                        const r=await fetch('/api/cards/'+this.editCard.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}); const d=await r.json();
-                        if(r.ok&&d.success){ this.showToast('已保存'); this.showEdit=false; await this.loadCards(); }
-                        else { this.showToast(d.detail||'保存失败'); } }
-                    catch(e){ this.showToast('网络错误'); }
-                },
-                async deleteCard(id){
-                    if(!confirm('确定删除这张卡片？')) return;
-                    try{ const r=await fetch('/api/cards/'+id,{method:'DELETE'}); const d=await r.json();
-                        if(r.ok&&d.success){ this.showToast('已删除'); await this.loadCards(); } else { this.showToast('删除失败'); } }
-                    catch(e){ this.showToast('网络错误'); }
+                scrollChat() {
+                    const el = this.$refs.chatBox;
+                    if (el) el.scrollTop = el.scrollHeight;
                 },
 
-                // ---------- 问答 ----------
-                clearChat(){ this.messages=[]; this.chatDocument=null; this.chatDocError=''; },
-                removeChatDocument(){ this.chatDocument=null; this.chatDocError=''; },
-                async uploadChatDocument(ev){
-                    const file=ev.target.files?.[0];
-                    if(!file) return;
-                    this.chatDocError=''; this.chatDocUploading=true;
-                    try{
-                        const fd=new FormData(); fd.append('file', file);
-                        const r=await fetch('/api/documents/parse',{method:'POST',body:fd});
-                        const d=await r.json();
-                        if(r.ok&&d.success){
-                            this.chatDocument={filename:d.filename,text:d.text,char_count:d.char_count,truncated:d.truncated};
-                            this.showToast('文件已识别：'+d.filename);
-                            if(!this.chatInput.trim()) this.chatInput='请结合知识库审查这份报价单，指出风险项和遗漏项';
-                        } else { this.chatDocError=d.detail||'文件解析失败'; }
-                    }catch(e){ this.chatDocError='上传失败'; }
-                    finally{ this.chatDocUploading=false; ev.target.value=''; }
+                async sendChat() {
+                    const q = this.chatInput.trim();
+                    if (!q || this.chatLoading) return;
+                    if (!this.serverConfigured) {
+                        this.showToast('服务还没连接好，请先完成一次初始化');
+                        return;
+                    }
+
+                    const docLabel = this.chatDocument ? ` [附件: ${this.chatDocument.filename}]` : '';
+                    this.messages.push({ role: 'user', content: q + docLabel });
+                    this.chatInput = '';
+                    this.chatLoading = true;
+                    this.messages.push({
+                        role: 'assistant', content: '', pending: true,
+                        grounded: true, citations: [], showCite: false,
+                        hasDocument: !!this.chatDocument,
+                    });
+                    this.$nextTick(() => this.scrollChat());
+
+                    const msg = this.messages[this.messages.length - 1];
+                    const body = { question: q, ...this.modelPayload };
+                    if (this.chatDocument) {
+                        body.document_text = this.chatDocument.text;
+                        body.document_name = this.chatDocument.filename;
+                    }
+
+                    try {
+                        const r = await fetch('/api/chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            msg.content = d.answer;
+                            msg.grounded = d.grounded;
+                            msg.citations = d.citations || [];
+                            msg.hasDocument = d.has_document;
+                        } else {
+                            msg.content = d.detail || '出错了，请稍后再试';
+                            msg.error = true;
+                        }
+                    } catch (e) {
+                        msg.content = '网络错误，请检查连接';
+                        msg.error = true;
+                    } finally {
+                        msg.pending = false;
+                        this.chatLoading = false;
+                        this.$nextTick(() => this.scrollChat());
+                    }
                 },
-                scrollChat(){ const el=this.$refs.chatBox; if(el){ el.scrollTop=el.scrollHeight; } },
-                async sendChat(){
-                    const q=this.chatInput.trim(); if(!q||this.chatLoading) return;
-                    if(!this.serverConfigured){ this.showSettings=true; this.showToast('请先在服务端 .env 配置 API_KEY'); return; }
-                    const docLabel=this.chatDocument ? ` [附件: ${this.chatDocument.filename}]` : '';
-                    this.messages.push({role:'user',content:q+docLabel});
-                    this.chatInput=''; this.chatLoading=true;
-                    this.messages.push({role:'assistant',content:'',pending:true,grounded:true,citations:[],showCite:false,hasDocument:!!this.chatDocument});
-                    this.$nextTick(()=>this.scrollChat());
-                    const msg=this.messages[this.messages.length-1];
-                    const body={question:q,...this.modelPayload};
-                    if(this.chatDocument){ body.document_text=this.chatDocument.text; body.document_name=this.chatDocument.filename; }
-                    try{ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const d=await r.json();
-                        if(r.ok&&d.success){ msg.content=d.answer; msg.grounded=d.grounded; msg.citations=d.citations||[]; msg.hasDocument=d.has_document; }
-                        else { msg.content=d.detail||'出错了'; msg.error=true; } }
-                    catch(e){ msg.content='网络错误'; msg.error=true; }
-                    finally{ msg.pending=false; this.chatLoading=false; this.$nextTick(()=>this.scrollChat()); }
-                },
-            }
+            };
         }
     </script>
 </body>

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-抖音视频文案提取器 WebUI
+自装助手 WebUI
 
 启动方式:
     cp .env.example .env   # 填入 API_KEY
@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="AI 装修监理助手", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="自装助手", version="2.0.0", lifespan=lifespan)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 # 静态资源（PWA 图标 / manifest）
@@ -76,7 +76,7 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 # Service Worker：放在根路径以获得整站 scope（缓存静态外壳，API 不缓存）
 _SERVICE_WORKER_JS = """
-const CACHE = 'reno-assistant-v2';
+const CACHE = 'zizhuang-assistant-v1';
 self.addEventListener('install', (e) => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {

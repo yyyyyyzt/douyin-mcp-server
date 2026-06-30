@@ -1,4 +1,4 @@
-# AI 装修监理助手
+# 自装助手
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -12,6 +12,7 @@
 | 文档 | 内容 |
 |---|---|
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：架构 / 数据模型 / 接口契约 / 防幻觉策略 / 关键决策 |
+| [`docs/FRONTEND_REFACTOR_PLAN.md`](docs/FRONTEND_REFACTOR_PLAN.md) | 面向 AI 零基础手机用户的前端重构规划 |
 | [`PROGRESS.md`](PROGRESS.md) | 开发进度、任务分解与验收标准、新 agent 上手指南 |
 | [`AGENTS.md`](AGENTS.md) | 云端 agent 环境说明（uv / 测试 / 运行方式）|
 
