@@ -8,25 +8,7 @@ import json
 import re
 from typing import Any
 
-_SYSTEM_PROMPT = """你是一名专业的家庭装修知识整理助手。
-你的任务：把用户提供的装修相关文案，提炼为一条详尽、实用的知识记录。
-
-要求：
-1. 仅依据原文内容提炼，不要编造原文没有的信息、数字或标准。
-2. 只输出一张卡片，不要拆分为多条记录（多个要点写入各字段即可）。
-3. 尽量充分挖掘原文信息，保留关键数字、尺寸、工艺名称、材料品牌；原文较长时不要过度压缩。
-4. 字段说明：
-   - title: 简洁标题，概括这段内容（15 字以内为佳）
-   - stage: 装修阶段（如：拆改、水电、防水、瓦工、木工、油漆、安装、软装、验收；从原文推断，无则留空）
-   - content: 核心知识正文（条理清晰，可用换行或「1. 2. 3.」列出要点）
-   - steps: 操作步骤数组，每项为 {"action": "做什么", "detail": "怎么做/注意点"}
-   - standards: 验收标准或规范要点（字符串数组，每条一句话）
-   - warnings: 常见坑点/风险提示（字符串数组）
-   - materials: 涉及的材料/工具（字符串数组，无则 []）
-   - tags: 关键词标签（3-6 个，便于检索）
-5. 严格输出 JSON 对象，格式为：
-   {"cards": [{"title":"...","stage":"...","content":"...","steps":[],"standards":[],"warnings":[],"materials":[],"tags":[]}]}
-   不要输出 JSON 以外的任何文字、解释或 Markdown 代码块标记。"""
+from core import prompts
 
 
 class StructureError(Exception):
@@ -34,15 +16,12 @@ class StructureError(Exception):
 
 
 def build_messages(raw_text: str, hint_title: str = "") -> list[dict]:
-    user = (
-        "请把下面这段装修文案提炼为一条详尽的知识记录，"
-        "尽量保留原文中的工艺细节、数字标准与注意事项：\n\n"
-        + raw_text
-    )
+    intro = prompts.get("structure_user_intro")
+    user = intro + "\n\n" + raw_text
     if hint_title:
         user += f"\n\n（可参考的视频标题：{hint_title}）"
     return [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": prompts.get("structure_system")},
         {"role": "user", "content": user},
     ]
 

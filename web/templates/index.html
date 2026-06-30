@@ -343,40 +343,87 @@
     <div x-show="showSettings" x-transition.opacity
          class="fixed inset-0 z-50 sheet-backdrop flex items-end sm:items-center justify-center"
          @click.self="showSettings=false" style="display:none">
-        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-5 animate-fadeIn max-h-[85vh] overflow-y-auto"
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl p-5 animate-fadeIn max-h-[90vh] overflow-y-auto"
              style="padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px))">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-surface-800">高级设置</h3>
                 <button @click="showSettings=false" class="w-8 h-8 rounded-full hover:bg-surface-100 flex items-center justify-center text-surface-500">✕</button>
             </div>
-            <div x-show="!serverConfigured" class="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-xl">
-                服务还没连接好。管理员需在服务端配置密钥后重启服务。
+
+            <div class="flex gap-1 p-1 bg-surface-100 rounded-xl mb-4">
+                <button @click="settingsPanel='models'"
+                        class="flex-1 py-2 rounded-lg text-sm font-medium transition-smooth"
+                        :class="settingsPanel==='models' ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-500'">模型</button>
+                <button @click="openPromptsPanel()"
+                        class="flex-1 py-2 rounded-lg text-sm font-medium transition-smooth"
+                        :class="settingsPanel==='prompts' ? 'bg-white text-surface-800 shadow-sm' : 'text-surface-500'">提示词调试</button>
             </div>
-            <details class="mb-4 text-xs text-surface-400">
-                <summary class="cursor-pointer text-surface-500">查看技术说明</summary>
-                <p class="mt-2">密钥在服务端 <code class="bg-surface-100 px-1 rounded">.env</code> 配置，普通用户无需操作。</p>
-            </details>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-medium text-surface-500 mb-1">视频内容读取方式</label>
-                    <select x-model="asrModel" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
-                        <template x-for="m in asrModels" :key="m.id">
-                            <option :value="m.id" x-text="m.name + ' — ' + m.description"></option>
-                        </template>
-                    </select>
+
+            <div x-show="settingsPanel==='models'">
+                <div x-show="!serverConfigured" class="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-xl">
+                    服务还没连接好。管理员需在服务端配置密钥后重启服务。
                 </div>
-                <div>
-                    <label class="block text-xs font-medium text-surface-500 mb-1">知识整理方式</label>
-                    <select x-model="llmModel" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
-                        <template x-for="m in llmModels" :key="m.id">
-                            <option :value="m.id" x-text="m.name + ' — ' + m.description"></option>
-                        </template>
-                    </select>
+                <details class="mb-4 text-xs text-surface-400">
+                    <summary class="cursor-pointer text-surface-500">查看技术说明</summary>
+                    <p class="mt-2">密钥在服务端 <code class="bg-surface-100 px-1 rounded">.env</code> 配置，普通用户无需操作。</p>
+                </details>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-surface-500 mb-1">视频内容读取方式</label>
+                        <select x-model="asrModel" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                            <template x-for="m in asrModels" :key="m.id">
+                                <option :value="m.id" x-text="m.name + (m.tier==='premium' ? ' ★' : '') + ' — ' + m.description"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-surface-500 mb-1">知识整理 / 问答模型</label>
+                        <select x-model="llmModel" class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                            <template x-for="m in llmModels" :key="m.id">
+                                <option :value="m.id" x-text="m.name + (m.tier==='premium' ? ' ★' : '') + ' — ' + m.description"></option>
+                            </template>
+                        </select>
+                        <p class="text-xs text-surface-400 mt-1">★ 为高级模型，适合复杂文案与合同审查。</p>
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-5">
+                    <button @click="resetModels()" class="flex-1 h-11 border border-surface-200 rounded-xl text-sm text-surface-700">恢复默认</button>
+                    <button @click="saveModels()" class="flex-1 h-11 bg-gradient-brand text-white rounded-xl text-sm">保存</button>
                 </div>
             </div>
-            <div class="flex gap-3 mt-5">
-                <button @click="resetModels()" class="flex-1 h-11 border border-surface-200 rounded-xl text-sm text-surface-700">恢复默认</button>
-                <button @click="saveModels()" class="flex-1 h-11 bg-gradient-brand text-white rounded-xl text-sm">保存</button>
+
+            <div x-show="settingsPanel==='prompts'">
+                <p class="text-sm text-surface-500 mb-3">集中编辑所有系统提示词，保存后立即生效（写入 <code class="text-xs bg-surface-100 px-1 rounded">data/prompts.json</code>）。</p>
+                <div x-show="adminTokenRequired" class="mb-3">
+                    <label class="block text-xs font-medium text-surface-500 mb-1">管理员令牌</label>
+                    <input x-model="adminToken" type="password" placeholder="与 .env 中 ADMIN_TOKEN 一致"
+                           class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                </div>
+                <div x-show="promptsError" class="mb-3 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700" x-text="promptsError"></div>
+                <div x-show="promptsLoading" class="text-sm text-surface-400 py-6 text-center">加载提示词…</div>
+                <div x-show="!promptsLoading && promptItems.length" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-surface-500 mb-1">选择要编辑的提示词</label>
+                        <select x-model="selectedPromptKey" @change="syncPromptDraft()"
+                                class="w-full px-3 py-2.5 text-sm border border-surface-200 rounded-xl focus-ring bg-white">
+                            <template x-for="p in promptItems" :key="p.key">
+                                <option :value="p.key" x-text="p.label + (p.is_custom ? '（已自定义）' : '')"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <template x-for="p in promptItems" :key="p.key + '-meta'">
+                        <div x-show="selectedPromptKey === p.key" class="space-y-2">
+                            <p class="text-xs text-surface-500" x-text="p.description"></p>
+                            <p class="text-xs text-brand-600" x-text="'用于：' + p.used_in"></p>
+                            <textarea x-model="promptDrafts[p.key]" rows="12"
+                                      class="w-full px-3 py-2.5 text-xs font-mono border border-surface-200 rounded-xl resize-y focus-ring leading-relaxed"></textarea>
+                        </div>
+                    </template>
+                </div>
+                <div class="flex gap-3 mt-5" x-show="!promptsLoading && promptItems.length">
+                    <button @click="resetPrompts()" class="flex-1 h-11 border border-surface-200 rounded-xl text-sm text-surface-700">恢复全部默认</button>
+                    <button @click="savePrompts()" class="flex-1 h-11 bg-gradient-brand text-white rounded-xl text-sm">保存提示词</button>
+                </div>
             </div>
         </div>
     </div>
@@ -440,10 +487,18 @@
                 ],
                 toast: '',
                 showSettings: false,
+                settingsPanel: 'models',
                 serverConfigured: false,
                 llmModel: '', asrModel: '',
                 defaultLlmModel: '', defaultAsrModel: '',
                 llmModels: [], asrModels: [],
+                adminToken: '',
+                adminTokenRequired: false,
+                promptItems: [],
+                selectedPromptKey: '',
+                promptDrafts: {},
+                promptsLoading: false,
+                promptsError: '',
 
                 // --- Collect ---
                 collectInput: '',
@@ -518,11 +573,104 @@
                 init() {
                     const lm = localStorage.getItem('reno_llm_model');
                     const am = localStorage.getItem('reno_asr_model');
+                    const at = localStorage.getItem('reno_admin_token');
                     if (lm) this.llmModel = lm;
                     if (am) this.asrModel = am;
+                    if (at) this.adminToken = at;
                     this.loadConfig();
                     if ('serviceWorker' in navigator) {
                         navigator.serviceWorker.register('/sw.js').catch(() => {});
+                    }
+                },
+
+
+                adminHeaders() {
+                    const h = { 'Content-Type': 'application/json' };
+                    if (this.adminToken) h['X-Admin-Token'] = this.adminToken;
+                    return h;
+                },
+
+                openPromptsPanel() {
+                    this.settingsPanel = 'prompts';
+                    this.loadPrompts();
+                },
+
+                async loadPrompts() {
+                    this.promptsLoading = true;
+                    this.promptsError = '';
+                    try {
+                        const headers = {};
+                        if (this.adminToken) headers['X-Admin-Token'] = this.adminToken;
+                        const r = await fetch('/api/admin/prompts', { headers });
+                        const d = await r.json();
+                        if (!r.ok) {
+                            this.promptsError = d.detail || '加载失败';
+                            return;
+                        }
+                        this.promptItems = d.prompts || [];
+                        this.promptDrafts = {};
+                        for (const p of this.promptItems) {
+                            this.promptDrafts[p.key] = p.content;
+                        }
+                        if (!this.selectedPromptKey && this.promptItems.length) {
+                            this.selectedPromptKey = this.promptItems[0].key;
+                        }
+                    } catch (e) {
+                        this.promptsError = '网络错误';
+                    } finally {
+                        this.promptsLoading = false;
+                    }
+                },
+
+                syncPromptDraft() {},
+
+                async savePrompts() {
+                    this.promptsError = '';
+                    try {
+                        const r = await fetch('/api/admin/prompts', {
+                            method: 'PUT',
+                            headers: this.adminHeaders(),
+                            body: JSON.stringify({ prompts: this.promptDrafts }),
+                        });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            if (this.adminToken) {
+                                localStorage.setItem('reno_admin_token', this.adminToken);
+                            }
+                            this.promptItems = d.prompts || [];
+                            for (const p of this.promptItems) {
+                                this.promptDrafts[p.key] = p.content;
+                            }
+                            this.showToast('提示词已保存');
+                        } else {
+                            this.promptsError = d.detail || '保存失败';
+                        }
+                    } catch (e) {
+                        this.promptsError = '网络错误';
+                    }
+                },
+
+                async resetPrompts() {
+                    if (!confirm('确定恢复全部提示词为默认？')) return;
+                    this.promptsError = '';
+                    try {
+                        const r = await fetch('/api/admin/prompts/reset', {
+                            method: 'POST',
+                            headers: this.adminHeaders(),
+                        });
+                        const d = await r.json();
+                        if (r.ok && d.success) {
+                            this.promptItems = d.prompts || [];
+                            this.promptDrafts = {};
+                            for (const p of this.promptItems) {
+                                this.promptDrafts[p.key] = p.content;
+                            }
+                            this.showToast('已恢复默认提示词');
+                        } else {
+                            this.promptsError = d.detail || '恢复失败';
+                        }
+                    } catch (e) {
+                        this.promptsError = '网络错误';
                     }
                 },
 
@@ -535,6 +683,7 @@
                         this.asrModels = d.asr_models || [];
                         this.defaultLlmModel = d.defaults?.llm_model || '';
                         this.defaultAsrModel = d.defaults?.asr_model || '';
+                        this.adminTokenRequired = !!d.admin_token_required;
                         if (!this.llmModel) this.llmModel = this.defaultLlmModel;
                         if (!this.asrModel) this.asrModel = this.defaultAsrModel;
                     } catch (e) {}
