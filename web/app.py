@@ -35,7 +35,7 @@ import requests
 from douyin_downloader import get_video_info, extract_text
 
 # 核心模块：知识库存储、LLM、结构化、检索、问答
-from core import db, structure, retrieve, qa, documents
+from core import db, structure, retrieve, qa, documents, prompts
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
 from core.documents import DocumentParseError
@@ -189,7 +189,49 @@ async def app_config():
         },
         "llm_models": LLM_MODEL_CATALOG,
         "asr_models": ASR_MODEL_CATALOG,
+        "admin_token_required": bool(os.getenv("ADMIN_TOKEN", "").strip()),
     }
+
+
+def _verify_admin(request: Request) -> None:
+    """可选管理员令牌：未配置 ADMIN_TOKEN 时视为单机自用开放。"""
+    expected = os.getenv("ADMIN_TOKEN", "").strip()
+    if not expected:
+        return
+    got = request.headers.get("X-Admin-Token", "").strip()
+    if got != expected:
+        raise HTTPException(status_code=403, detail="需要管理员令牌")
+
+
+class PromptsUpdateRequest(BaseModel):
+    prompts: dict[str, str]
+
+
+@app.get("/api/admin/prompts")
+async def admin_list_prompts(request: Request):
+    """列出全部系统提示词（含元数据），供超级管理员调试。"""
+    _verify_admin(request)
+    return {
+        "success": True,
+        "prompts": prompts.list_for_admin(),
+        "admin_token_required": bool(os.getenv("ADMIN_TOKEN", "").strip()),
+    }
+
+
+@app.put("/api/admin/prompts")
+async def admin_save_prompts(req: PromptsUpdateRequest, request: Request):
+    """保存自定义提示词到 data/prompts.json。"""
+    _verify_admin(request)
+    prompts.save(req.prompts)
+    return {"success": True, "prompts": prompts.list_for_admin()}
+
+
+@app.post("/api/admin/prompts/reset")
+async def admin_reset_prompts(request: Request):
+    """恢复全部提示词为内置默认。"""
+    _verify_admin(request)
+    prompts.reset()
+    return {"success": True, "prompts": prompts.list_for_admin()}
 
 
 @app.post("/api/video/info", response_model=VideoInfoResponse)

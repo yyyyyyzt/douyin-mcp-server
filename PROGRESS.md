@@ -154,3 +154,5 @@ MVP（任务 1~9）已全部完成。后续可选增强：
 | `KNOWLEDGE_DB` | `data/knowledge.db` | SQLite 路径 |
 | `CHAT_MIN_SCORE` | `0.0` | 问答 grounded 判定阈值（最高分低于此判为无依据）|
 | `PORT` | `8080` | WebUI 端口 |
+| `ADMIN_TOKEN` | — | 可选；配置后提示词调试 API 需请求头 `X-Admin-Token` |
+| `PROMPTS_FILE` | `data/prompts.json` | 自定义提示词存储路径 |

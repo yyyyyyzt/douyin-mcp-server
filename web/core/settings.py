@@ -33,16 +33,58 @@ LLM_MODEL_CATALOG = [
         "description": "轻量模型，响应快",
     },
     {
+        "id": "Qwen/Qwen3-32B",
+        "name": "Qwen3 32B",
+        "tier": "premium",
+        "description": "理解力更强，适合复杂文案整理",
+    },
+    {
         "id": "Qwen/Qwen2.5-72B-Instruct",
         "name": "Qwen2.5 72B",
         "tier": "premium",
         "description": "理解力强，知识提炼更详尽（适合复杂文案）",
     },
     {
+        "id": "deepseek-ai/DeepSeek-V4-Flash",
+        "name": "DeepSeek V4 Flash",
+        "tier": "standard",
+        "description": "V4 快速版，百万上下文，日常整理与问答性价比高",
+    },
+    {
+        "id": "deepseek-ai/DeepSeek-V4-Pro",
+        "name": "DeepSeek V4 Pro",
+        "tier": "premium",
+        "description": "V4 旗舰版，复杂推理与合同审查更佳",
+    },
+    {
+        "id": "deepseek-ai/DeepSeek-V3.2",
+        "name": "DeepSeek V3.2",
+        "tier": "premium",
+        "description": "深度推理，适合风险分析与长文案",
+    },
+    {
         "id": "deepseek-ai/DeepSeek-V3",
         "name": "DeepSeek V3",
         "tier": "premium",
-        "description": "深度推理，合同审查与风险分析更佳",
+        "description": "成熟稳定，合同审查与风险分析",
+    },
+    {
+        "id": "deepseek-ai/DeepSeek-R1",
+        "name": "DeepSeek R1",
+        "tier": "premium",
+        "description": "强推理模型，适合复杂问题拆解",
+    },
+    {
+        "id": "moonshotai/Kimi-K2-Instruct",
+        "name": "Kimi K2",
+        "tier": "premium",
+        "description": "长上下文理解，适合大段报价单分析",
+    },
+    {
+        "id": "zai-org/GLM-4.7",
+        "name": "GLM 4.7",
+        "tier": "premium",
+        "description": "中文理解优秀，整理与问答均衡",
     },
 ]
 
