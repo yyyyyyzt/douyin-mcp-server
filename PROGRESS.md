@@ -1,9 +1,10 @@
 # 开发进度与任务分解
 
 > 配套阅读：[`docs/DESIGN.md`](docs/DESIGN.md)（总体设计 / 架构 / 接口契约 / 防幻觉策略）。
+> 微信小程序 + 多用户改造：[`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md)。
 > 本文件追踪"做到哪了、下一步做什么、验收标准是什么"，是新 agent 接手的入口。
 
-最后更新：完成前端重构（底部 Tab、收集一键保存、知识库搜索/详情抽屉、问答快捷问题、PWA 打磨），项目名称为「自装助手」。
+最后更新：确认「微信原生小程序 + 用户隔离」改造计划可行；已同步 DESIGN / README / 本进度文档（代码未动）。
 
 ---
 
@@ -20,9 +21,15 @@
 | 7 | 防幻觉（阈值 + 引用 + 警告）| ✅ 已完成（后端）|
 | 8 | 前端三 Tab + PWA + 联调 | ✅ 已完成 |
 | 9 | 前端重构（手机极简 UI）| ✅ 已完成 |
+| 10 | Schema + db/retrieve 按 `user_id` 隔离 | ⬜ 待开始 |
+| 11 | Auth 中间件 + 现有路由挂 user | ⬜ 待开始 |
+| 12 | Web 本地登录兼容（`ALLOW_LOCAL_AUTH`）| ⬜ 待开始 |
+| 13 | 微信原生小程序三 Tab MVP | ⬜ 待开始 |
+| 14 | 小程序相关测试补齐 + 部署清单 | ⬜ 待开始 |
 
 > 说明：原始规划把"建 FTS5 索引"列为任务 6、"防幻觉"为任务 7。本进度表中 FTS5 索引
 > 已随任务 1 一并落地（`db.search_cards`），故任务 6 聚焦"检索调用 + 问答"，任务 7 聚焦"防幻觉逻辑"。
+> 任务 10~14 对应 [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md) 实施顺序。
 
 ---
 
@@ -34,6 +41,7 @@
   list_cards / update_card / delete_card / search_cards`
 - 要点：FTS5 `trigram` 中文检索；触发器保持索引同步；`video_id UNIQUE` 去重；
   `search_cards` 返回正向 `score`（越大越相关）。
+- **后续**：任务 10 将改为 `UNIQUE(user_id, video_id)`，所有读写带 `user_id`。
 
 ### 任务 2 · LLM 封装 ✅
 - 文件：`web/core/llm.py`，测试 `tests/test_llm.py`
@@ -118,27 +126,62 @@
 
 ---
 
-## 下一步（迭代方向，非 MVP 必需）
+## 下一步（任务 10~14 · 微信小程序 + 用户隔离）
 
-MVP（任务 1~9）已全部完成。后续可选增强：
-- 检索质量：`grounded` 阈值与 3-gram/bm25 分值口径统一，或引入 jieba/向量检索提升召回精度。
-- 结构化质量：默认 `Qwen2.5-7B` 偏弱，换更强 `LLM_MODEL` 可显著改善（无需改代码）。
-- 体验：链接录入后的卡片即时预览/微调、问答流式输出、PWA 离线数据缓存。
+> 计划已确认可行，详见 [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md)。
+> **当前仅完成文档对齐；实现按下列顺序推进，本文件状态随任务完成更新。**
+
+### 任务 10 · Schema + db/retrieve 作用域 ⬜
+- **目标**：可测的用户隔离数据层，不依赖微信网络。
+- **改动**：`web/core/db.py`、`web/core/retrieve.py`；启动时幂等迁移。
+- **要点**：
+  - 新增 `users` 表；`knowledge_cards.user_id`；去重改为 `UNIQUE(user_id, video_id)`。
+  - 已有数据归属 `openid=local-web` 默认用户。
+  - 所有 CRUD / FTS / LIKE / `retrieve` 强制 `user_id`。
+- **验收**：单测覆盖 A/B 用户互不可见、同用户 `video_id` 去重、不同用户可存同一 `video_id`；现有相关测试改为带 `user_id` 后全绿。
+
+### 任务 11 · Auth 中间件 + 路由挂 user ⬜
+- **目标**：`POST /api/auth/wechat/login` + HMAC Bearer；`get_current_user` 注入。
+- **改动**：新建 `web/core/auth.py`、`web/core/wechat.py`；`web/app.py` 挂载；`.env.example`。
+- **要点**：卡片/问答/转写/任务接口按 `user.id` 作用域；`_tasks` / `_extract_tasks` 写 `user_id`，越权轮询 403。
+- **验收**：无 token / 错误 token → 401；跨用户访问卡片或任务 → 403/404；登录签发可测（mock code2session）。
+
+### 任务 12 · Web 本地登录兼容 ⬜
+- **目标**：`ALLOW_LOCAL_AUTH=1` 时 `POST /api/auth/local` 签发同一套 token；WebUI 仍可用。
+- **改动**：`web/app.py`、`web/templates/index.html`（启动时取 token 并带 `Authorization`）。
+- **验收**：本地 Web 三 Tab 主流程可用；默认关闭本地登录时接口拒绝匿名业务请求。
+
+### 任务 13 · 微信原生小程序三 Tab MVP ⬜
+- **目标**：新建 `miniprogram/`，对齐收集 / 知识库 / 问答。
+- **要点**：`utils/request.js` + `utils/auth.js`；`wx.login` → 微信登录；收集走 extract 轮询 + save；
+  问答支持 `chooseMessageFile` / `uploadFile`；文案遵循 `FRONTEND_REFACTOR_PLAN.md`。
+- **验收**：开发者工具内三 Tab 可走通（可对接本地 HTTPS 或关闭合法域名校验）；登录失败阻断并提示服务未就绪。
+
+### 任务 14 · 测试补齐 + 部署清单 ⬜
+- **目标**：隔离 / 鉴权 / 越权单测齐全；文档与部署清单落地。
+- **清单**：公网 HTTPS + 备案域名；微信 request/uploadFile 合法域名；`WECHAT_*` / `SESSION_SECRET` 配置。
+- **验收**：`python -m pytest` 全绿；DESIGN / AGENTS / README 与实现一致。
+
+### 仍可选的非阻塞增强
+- 检索质量：`grounded` 阈值与 3-gram/bm25 分值口径统一，或引入 jieba/向量检索。
+- 结构化质量：换更强 `LLM_MODEL`（无需改代码）。
+- 体验：问答流式输出、PWA 离线数据缓存。
 
 ---
 
 ## 给新 agent 的上手指南
 
-1. **先读**：本文件 + `docs/DESIGN.md`；做前端重构时再读 `docs/FRONTEND_REFACTOR_PLAN.md`。
+1. **先读**：本文件 + `docs/DESIGN.md`；做前端重构时再读 `docs/FRONTEND_REFACTOR_PLAN.md`；
+   做小程序 / 多用户时再读 `docs/WECHAT_MINIPROGRAM_PLAN.md`。
 2. **环境**：项目用 `uv` 管理（见 `AGENTS.md`）。
    - 正常登录 shell 已自动激活 `.venv`，`python` / `pytest` / `uv` 可直接用。
    - 跑测试：`python -m pytest`（应全绿）。
    - 起服务：`python web/app.py` → http://localhost:8080
 3. **开发规范**：
    - **TDD**：先在 `tests/` 写用例，再实现；保持全绿。
-   - **依赖注入**：新接口复用 `get_db / get_llm_client`，便于测试覆盖。
-   - **不破坏既有接口契约**（小程序前端将依赖它）。
-   - LLM 调用统一走 `core/llm.LLMClient`，不要硬编码供应商。
+   - **依赖注入**：新接口复用 `get_db / get_llm_client / get_current_user`，便于测试覆盖。
+   - **业务 JSON 形状尽量兼容**（小程序与 Web 共用）；鉴权与 `user_id` 作用域是刻意变更。
+   - LLM 调用统一走 `core/llm.LLMClient`，不要硬编码供应商；**不把 API Key 放进小程序**。
 4. **Git**：在 `cursor/` 前缀的特性分支上工作（具体分支名后缀以本 agent 分配的模板为准），
    小步提交、每个逻辑改动一个 commit，完成后推送并开 PR。
 5. **完成一个任务后**：更新本文件的状态表与"已完成详情"，再提交。
@@ -156,3 +199,6 @@ MVP（任务 1~9）已全部完成。后续可选增强：
 | `PORT` | `8080` | WebUI 端口 |
 | `ADMIN_TOKEN` | — | 可选；配置后提示词调试 API 需请求头 `X-Admin-Token` |
 | `PROMPTS_FILE` | `data/prompts.json` | 自定义提示词存储路径 |
+| `WECHAT_APPID` / `WECHAT_SECRET` | — | 微信小程序（任务 11）|
+| `SESSION_SECRET` | — | HMAC 会话签名（任务 11）|
+| `ALLOW_LOCAL_AUTH` | `0` | `1` 时允许 Web 本地登录（任务 12）|

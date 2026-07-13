@@ -3,18 +3,20 @@
 > 本文件是项目的"单一事实来源（Single Source of Truth）"，描述目标、架构、数据模型、
 > 接口契约、防幻觉策略与关键技术决策。任何后续开发（包括新启动的 agent）都应先读本文件，
 > 再读 [`../PROGRESS.md`](../PROGRESS.md) 了解当前进度与下一步；前端重构还必须阅读
-> [`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)。
+> [`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)；微信小程序与多用户改造还必须阅读
+> [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
 
 ---
 
 ## 1. 项目起点（第一性原理）
 
-- **用户**：当前以作者自用为起点；下一阶段聚焦完全不懂 AI 的手机端自装用户，无多用户、无登录、无权限。
+- **用户**：MVP 以作者自用 Web 为起点；下一阶段面向完全不懂 AI 的手机端自装用户，
+  通过**微信原生小程序 + 微信登录**推广，知识库按 `openid` / `user_id` 隔离。
 - **目标**：把在短视频平台上认可的装修知识，沉淀为结构化卡片；与装修公司沟通时，
   基于这些卡片回答问题，**严格防止模型幻觉**。
 - **范围**：只做最核心的「存知识」和「问知识」两条链路。分享、协作、版本化、反馈闭环暂不做。
-- **形态**：先做一个可自托管的 Web 应用（移动优先 + PWA）；**长远目标是推广为微信小程序**，
-  因此后端必须是干净、前后端解耦的 JSON API。
+- **形态**：保留可自托管的 Web 应用（移动优先 + PWA，兼容本地登录）；**主推广形态为微信原生小程序**，
+  后端保持干净、前后端解耦的 JSON API，密钥 / ASR / LLM 全部在服务端。
 
 ### 与原始仓库的关系
 
@@ -29,39 +31,43 @@
 | 层 | 选择 | 原因 |
 |---|------|------|
 | 后端 | Python + FastAPI | 复用现有 WebUI 工程，AI 生态成熟 |
-| 数据库 | SQLite + FTS5(trigram) | 零配置、单文件；trigram 分词器支持中文子串检索 |
-| 前端 | 原生 HTML + Tailwind(CDN) + Alpine.js | 零构建，单页即可；后续可平移到小程序 |
+| 数据库 | SQLite + FTS5(trigram) | 零配置、单文件；trigram 分词器支持中文子串检索；按 `user_id` 隔离 |
+| 前端（Web） | 原生 HTML + Tailwind(CDN) + Alpine.js | 零构建；`ALLOW_LOCAL_AUTH` 兼容模式继续可用 |
+| 前端（小程序） | 微信原生（WXML/WXSS/JS） | 主推广形态；不引入 uni-app/Taro |
+| 鉴权 | 微信 `code2session` + HMAC Bearer token | 小程序登录；Web 本地登录共用同一套 token |
 | LLM | OpenAI 兼容接口（默认硅基流动） | **供应商可替换**，结构化与问答统一一套客户端 |
 | 语音识别 | 硅基流动 SenseVoice / 阿里云百炼 | 复用原仓库能力 |
 | 向量检索 | 暂不做 | 初期知识量少，关键词 + FTS5 足够；保留后续扩展空间 |
-| 部署 | 本地 / 单机 Docker | 自用，无需公网 |
+| 部署 | 本地 / 单机 Docker；小程序需公网 HTTPS | Web 自用可本地；小程序需备案域名 + 微信合法域名 |
 
 ---
 
 ## 3. 整体架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  前端（web/templates/index.html，Tailwind + Alpine）           │
-│  Tab1 收集  |  Tab2 知识库  |  Tab3 问答        （底部固定导航） │
-└───────────────┬─────────────────────────────────────────────┘
-                │ fetch JSON
-┌───────────────▼─────────────────────────────────────────────┐
-│  FastAPI（web/app.py）                                         │
-│   /api/video/*      抖音解析/转写/下载（已有）                  │
-│   /api/cards/*      知识卡片录入/列表/详情（部分完成）          │
-│   /api/chat         基于知识库的问答（待开发）                  │
-│   依赖注入：get_db / get_llm_client（便于测试覆盖）            │
-└───┬───────────────┬───────────────┬──────────────┬───────────┘
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ WebUI（index.html，兼容模式）  │  │ 微信原生小程序 miniprogram/    │
+│ 收集 | 知识库 | 问答           │  │ 收集 | 知识库 | 问答           │
+└──────────────┬───────────────┘  └──────────────┬───────────────┘
+               │ Bearer Token JSON API            │
+┌──────────────▼──────────────────────────────────▼──────────────┐
+│  FastAPI（web/app.py）                                           │
+│   /api/auth/*       微信登录 / 本地登录（兼容 Web）               │
+│   /api/video/*      抖音解析/转写/下载（按 user 作用域）           │
+│   /api/cards/*      知识卡片 CRUD（按 user_id 隔离）              │
+│   /api/chat         基于个人知识库的问答                           │
+│   依赖注入：get_db / get_current_user / get_llm_client            │
+└───┬───────────────┬───────────────┬──────────────┬─────────────┘
     │               │               │              │
 ┌───▼────┐   ┌──────▼─────┐   ┌─────▼──────┐  ┌────▼─────────────┐
-│core/db │   │core/llm    │   │core/       │  │douyin_downloader │
-│SQLite  │   │OpenAI兼容  │   │structure   │  │解析/下载/转写     │
-│+FTS5   │   │可替换供应商│   │文案->卡片  │  │（原仓库脚本）     │
+│core/db │   │core/llm    │   │core/auth   │  │douyin_downloader │
+│SQLite  │   │OpenAI兼容  │   │wechat +    │  │解析/下载/转写     │
+│+FTS5   │   │可替换供应商│   │session     │  │（原仓库脚本）     │
 └────────┘   └────────────┘   └────────────┘  └──────────────────┘
     │
 ┌───▼──────────────────────────────────┐
 │ data/knowledge.db （已 gitignore）     │
+│ users + knowledge_cards(user_id)      │
 └───────────────────────────────────────┘
 ```
 
@@ -70,17 +76,20 @@
 ```
 douyin-mcp-server/
 ├── web/
-│   ├── app.py                  # FastAPI 应用（抖音提取 + 知识库 + 问答）
+│   ├── app.py                  # FastAPI 应用（鉴权 + 抖音提取 + 知识库 + 问答）
 │   ├── core/                   # 自装助手核心
-│   │   ├── db.py               # SQLite + FTS5 存储与检索
+│   │   ├── db.py               # SQLite + FTS5 存储与检索（按 user_id）
+│   │   ├── auth.py / wechat.py # 会话签发、微信 code2session（待实施）
 │   │   ├── llm.py              # OpenAI 兼容、可替换供应商的 LLM 客户端
 │   │   └── structure.py        # 文案 -> 结构化知识卡片
-│   └── templates/index.html    # 单页前端（待加知识库/问答 Tab）
+│   └── templates/index.html    # Web 单页前端（兼容本地登录）
+├── miniprogram/                # 微信原生小程序（待实施）
 ├── douyin-video/scripts/douyin_downloader.py   # 解析/下载/转写（复用）
 ├── douyin_mcp_server/          # MCP server（原仓库）
 ├── tests/                      # pytest 测试（TDD）
 ├── data/                       # SQLite 文件（gitignore）
 ├── docs/DESIGN.md              # 本文件
+├── docs/WECHAT_MINIPROGRAM_PLAN.md  # 小程序 + 用户隔离计划
 ├── PROGRESS.md                 # 进度与任务分解
 └── AGENTS.md                   # 云端 agent 环境说明
 ```
@@ -89,21 +98,35 @@ douyin-mcp-server/
 
 ## 4. 数据模型
 
-主表 `knowledge_cards` + 外部内容 FTS5 虚拟表 `knowledge_fts`（trigram 分词），
-通过触发器保持同步。
+`users` 表 + 主表 `knowledge_cards`（含 `user_id`）+ 外部内容 FTS5 虚拟表 `knowledge_fts`
+（trigram 分词），通过触发器保持同步。所有卡片 CRUD / 检索强制带 `user_id`。
+
+> 现状：MVP 仍为全局 `video_id UNIQUE`、无 `user_id`。任务 10 起按下列目标 schema
+> 幂等迁移；已有数据归属默认用户 `openid=local-web`。详见
+> [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
 
 ```sql
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    openid TEXT NOT NULL UNIQUE,   -- 微信 openid；Web 兼容用户为 'local-web'
+    unionid TEXT,                  -- 可空
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP
+);
+
 CREATE TABLE knowledge_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
     stage TEXT,                 -- 阶段：水电/泥木/油漆/防水/拆改/验收...
     title TEXT,
     raw_text TEXT NOT NULL,     -- 原始文案（转写或粘贴）
     structured_json TEXT,       -- AI 结构化结果（stage/title/steps）
     source_type TEXT DEFAULT 'manual',  -- 'manual' | 'douyin_link'
     source_url TEXT,            -- 抖音分享链接（来源追溯）
-    video_id TEXT UNIQUE,       -- 抖音视频 ID，用于去重
+    video_id TEXT,              -- 抖音视频 ID；与 user_id 组合去重
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, video_id)   -- 同一用户不重复入库；不同用户可存同一视频
 );
 
 CREATE VIRTUAL TABLE knowledge_fts USING fts5(
@@ -112,6 +135,7 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
     tokenize='trigram'
 );
 -- + AFTER INSERT/UPDATE/DELETE 触发器保持 FTS 同步
+-- 检索时 JOIN knowledge_cards 并 WHERE user_id = ?
 ```
 
 ### 结构化卡片 JSON schema
@@ -132,23 +156,38 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 
 ## 5. API 契约
 
-> 所有接口返回 JSON；前后端解耦，便于后续接入微信小程序。
+> 所有接口返回 JSON；前后端解耦。小程序与 Web 共用同一套契约；
+> 卡片 / 问答 / 转写 / 任务接口在任务 11 起需 `Authorization: Bearer <token>`，
+> 并按当前用户 `user_id` 隔离（响应 JSON 形状尽量不变）。
 
-### 已实现
+### 鉴权（待实施，任务 11~12）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/health` | 健康检查 + ASR Key 配置状态 |
+| POST | `/api/auth/wechat/login` | 小程序 `wx.login` 的 `code` → `code2session` → 签发 Bearer token |
+| POST | `/api/auth/local` | Web 兼容登录（仅 `ALLOW_LOCAL_AUTH=1`）；签发同一套 token |
+
+请求头：`Authorization: Bearer <token>`。任务内存字典写入 `user_id`，轮询校验归属，防越权。
+
+### 已实现（业务 API；鉴权挂载见进度任务 11）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/health` | 健康检查 + ASR Key 配置状态（可匿名）|
 | POST | `/api/video/info` | 抖音链接 → 视频信息/下载链接（无需 Key）|
-| POST | `/api/video/extract` | 抖音链接 → 转写文案（需 ASR Key）|
+| POST | `/api/video/extract` | 抖音链接 → 转写文案（需 ASR Key；异步）|
+| GET | `/api/video/extract/task/{task_id}` | 转写任务进度 |
 | GET | `/api/video/download` | 代理下载无水印视频 |
+| POST | `/api/cards/structure` | 文案 → AI 结构化（不入库）|
+| POST | `/api/cards/save` | 结构化结果入库 |
 | POST | `/api/cards/from-text` | 粘贴文案 → AI 结构化 → 入库（支持多卡）|
 | POST | `/api/cards/from-link` | 抖音链接 → 转写 → 结构化 → 入库（异步，返回 `task_id`）|
 | GET | `/api/cards/task/{task_id}` | 查询链接录入任务进度/结果 |
-| GET | `/api/cards?stage=` | 卡片列表（可按阶段筛选）|
-| GET | `/api/cards/{id}` | 卡片详情（含解析后的 steps）|
+| GET | `/api/cards?stage=` | 卡片列表（可按阶段筛选；按用户隔离）|
+| GET | `/api/cards/{id}` | 卡片详情（含解析后的 steps；按用户隔离）|
 | PUT | `/api/cards/{id}` | 编辑卡片（只改文本，不重新调 AI，同步 structured_json）|
 | DELETE | `/api/cards/{id}` | 删除卡片 |
+| POST | `/api/documents/parse` | 上传报价单/合同解析 |
 | POST | `/api/chat` | 问答：检索 → 拼 prompt → LLM → 带引用回答（含 `grounded`）|
 
 `/api/cards/from-text` 响应示例：
@@ -227,8 +266,9 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 | bm25 方向 | 转为正向 `score` | SQLite bm25 越小越相关，统一为越大越相关便于设阈值 |
 | LLM 供应商 | OpenAI 兼容 + env 配置 | 默认硅基流动（与 ASR 同平台，一个 Key 搞定），随时可换 OpenAI/DeepSeek/本地模型 |
 | 录入耗时 | 链接版需异步 | 下载+转写+结构化可能 20~60s，必须异步 + 进度，避免前端卡死 |
-| 去重 | `video_id UNIQUE` | 同一视频不重复入库 |
-| 依赖注入 | `get_db`/`get_llm_client` | 测试可覆盖，无需真实网络/Key |
+| 去重 | `UNIQUE(user_id, video_id)` | 同一用户不重复入库；不同用户可存同一视频（任务 10 起）|
+| 用户隔离 | `user_id` + Bearer token | 微信 openid；Web 用 `local-web` 兼容用户 |
+| 依赖注入 | `get_db`/`get_current_user`/`get_llm_client` | 测试可覆盖，无需真实网络/Key |
 | 测试策略 | TDD | 先写测试再实现，核心逻辑全覆盖 |
 
 ---
@@ -246,15 +286,22 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 | `KNOWLEDGE_DB` | `data/knowledge.db` | SQLite 文件路径 |
 | `CHAT_MIN_SCORE` | `0.0` | 问答 `grounded` 判定阈值（最高召回分低于此 → 判为无依据）|
 | `PORT` | `8080` | WebUI 端口 |
+| `WECHAT_APPID` | — | 微信小程序 AppID（任务 11）|
+| `WECHAT_SECRET` | — | 微信小程序 AppSecret（任务 11）|
+| `SESSION_SECRET` | — | HMAC 会话签名密钥（任务 11）|
+| `ALLOW_LOCAL_AUTH` | `0` | 为 `1` 时允许 `POST /api/auth/local`（Web 兼容）|
 
 ---
 
 ## 10. 不做的事情（红线）
 
-- 不引入用户系统、登录、OAuth。
-- 不做社交分享、副本分支、版本管理。
+- 不做社交分享、副本分支、版本管理、多租户协作。
 - 不做向量数据库、图数据库（保留后续扩展）。
 - 不做链接自动抓取以外的反爬对抗（人工粘贴链接优先）。
-- 不做商业化/社区功能。
+- 不做商业化/社区功能；不把 API Key 放进小程序客户端。
+- 不引入 uni-app / Taro；小程序用微信原生。
+- 本期不做多实例 Redis 任务队列（继续单机内存队列 + SQLite）。
 
-> 例外：长远会做微信小程序前端用于推广，但**后端契约保持不变**。
+> **用户与登录（已调整）**：原「不做用户系统」红线已取消。现采用**微信登录 + 按 openid / user_id 隔离知识库**；
+> WebUI 以 `ALLOW_LOCAL_AUTH` 本地登录兼容。JSON 业务契约形状尽量保持不变，仅增加鉴权与作用域。
+> 详细改造步骤见 [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。

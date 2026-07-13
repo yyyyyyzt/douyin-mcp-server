@@ -5,7 +5,7 @@
 把短视频里认可的装修知识，沉淀为**结构化卡片**；与装修公司沟通时，基于这些卡片回答问题，
 **严格防止模型幻觉**。粘贴一个抖音分享链接即可自动转写、AI 结构化入库——无需手动誊抄。
 
-> 自用、单机、可自托管的 Web 应用（移动优先 + PWA）；长远目标是推广为微信小程序。
+> 可自托管的 Web 应用（移动优先 + PWA）；下一阶段主推**微信原生小程序**，后端增加微信登录与按用户隔离知识库，WebUI 以兼容模式继续可用。
 
 ## 📚 文档导航
 
@@ -13,18 +13,16 @@
 |---|---|
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：架构 / 数据模型 / 接口契约 / 防幻觉策略 / 关键决策 |
 | [`docs/FRONTEND_REFACTOR_PLAN.md`](docs/FRONTEND_REFACTOR_PLAN.md) | 面向 AI 零基础手机用户的前端重构规划 |
+| [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md) | 微信原生小程序 + 用户隔离改造计划（已确认可行）|
 | [`PROGRESS.md`](PROGRESS.md) | 开发进度、任务分解与验收标准、新 agent 上手指南 |
 | [`AGENTS.md`](AGENTS.md) | 云端 agent 环境说明（uv / 测试 / 运行方式）|
 
 ## 🚦 当前进度
 
-- ✅ 任务 1~3：知识库存储（SQLite + FTS5 中文检索）、LLM 封装（OpenAI 兼容、可替换供应商）、文本录入与结构化。
-- ✅ 任务 4：抖音链接一键入库（异步任务 + 进度查询 + `video_id` 去重）。
-- ✅ 任务 5：卡片编辑 / 删除。
-- ✅ 任务 6~7：检索 + 问答（带引用）+ 防幻觉（`grounded` 判定 + 无依据声明）。
-- ✅ 任务 8：前端三 Tab（提取 / 知识库 / 问答）+ PWA + 移动端适配。
+- ✅ 任务 1~9：知识库 / LLM / 录入 / 问答 / 防幻觉 / Web 三 Tab + PWA 手机极简 UI（MVP 完成）。
+- ⬜ 任务 10~14：微信登录 + 按 `user_id` 隔离 → Web 本地登录兼容 → 原生小程序三 Tab MVP → 测试与部署清单。
 
-详见 [`PROGRESS.md`](PROGRESS.md)。
+详见 [`PROGRESS.md`](PROGRESS.md) 与 [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md)。
 
 ## ⚡ 快速开始
 
@@ -33,6 +31,7 @@
 uv sync
 
 # 2. 配置 LLM / 语音识别密钥（二者可共用一个硅基流动 Key）
+cp .env.example .env   # 编辑填入 API_KEY 等
 export API_KEY="sk-xxx"          # 语音识别（ASR），也作 LLM_API_KEY 的回退
 # 可选：替换 LLM 供应商 / 模型
 # export LLM_BASE_URL="https://api.siliconflow.cn/v1"
@@ -50,12 +49,13 @@ uv run python scripts/check_api_keys.py   # --only llm | asr
 
 > 💡 获取免费 API Key：[硅基流动](https://cloud.siliconflow.cn/i/TxUlXG3u)（新用户有免费额度）。
 > 主要环境变量见 [`docs/DESIGN.md` 第 9 节](docs/DESIGN.md)。
+> 小程序相关变量（任务 11 起）：`WECHAT_APPID` / `WECHAT_SECRET` / `SESSION_SECRET` / `ALLOW_LOCAL_AUTH`。
 
 ### 🖥️ 三个 Tab
 
-- **提取**：粘贴抖音分享链接 → 获取无水印视频信息 / AI 转写文案，可一键「加入知识库」。
-- **知识库**：链接 / 文本两种录入方式；卡片列表支持按阶段筛选、编辑、删除。
-- **问答**：基于知识库检索作答并展示引用；无相关知识时显示「未基于个人知识库」黄色警告（防幻觉）。
+- **收集**：粘贴抖音分享链接或文字 → 一键读取、整理并保存到知识库。
+- **知识库**：搜索 / 阶段筛选；卡片详情可编辑、删除。
+- **问答**：基于知识库检索作答并展示引用；无相关知识时提示「没有找到你的知识依据」（防幻觉）。
 
 ### 🧩 知识库 API 速查
 
@@ -69,6 +69,9 @@ uv run python scripts/check_api_keys.py   # --only llm | asr
 | `PUT` | `/api/cards/{id}` | 编辑卡片文本（不重新调 AI，同步 `structured_json`）|
 | `DELETE` | `/api/cards/{id}` | 删除卡片 |
 | `POST` | `/api/chat` | 知识库问答 → 返回 `answer` + `grounded` + `citations`（防幻觉）|
+
+> 任务 11 起，上述业务接口需 `Authorization: Bearer <token>`，并按登录用户隔离数据。
+> 鉴权：`POST /api/auth/wechat/login`（小程序）；`POST /api/auth/local`（仅 `ALLOW_LOCAL_AUTH=1` 的 Web 兼容）。
 
 ```bash
 # 链接一键入库（异步：先拿 task_id，再轮询进度）
@@ -88,6 +91,8 @@ curl -X POST localhost:8080/api/chat -H 'Content-Type: application/json' \
 | uv | Python 包管理 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Python | 3.10+ | `uv python install 3.12` |
 | FFmpeg | 音视频处理（链接转写需要）| `brew install ffmpeg`（macOS）/ `apt install ffmpeg`（Ubuntu）|
+
+小程序上线另需：公网 HTTPS + 备案域名、微信公众平台 request/uploadFile 合法域名（见改造计划部署清单）。
 
 ## ⚠️ 免责声明
 

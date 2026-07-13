@@ -32,3 +32,12 @@ startup update script already runs `uv sync`, so the `.venv` is present and depe
 - "获取信息 / parse info" needs live network access to Douyin and a *currently valid*
   share link. Expired/sample links return app-level errors like "list index out of range";
   that means the stack works but the link is stale, not that the environment is broken.
+
+### 微信小程序 / 多用户（任务 10~14，见 docs/WECHAT_MINIPROGRAM_PLAN.md）
+- 计划已确认：保留 FastAPI JSON API；新增微信原生小程序 `miniprogram/`；后端微信登录 +
+  按 `user_id` 隔离；WebUI 用 `ALLOW_LOCAL_AUTH=1` + `POST /api/auth/local` 兼容。
+- 配置（实施后）：`WECHAT_APPID` / `WECHAT_SECRET` / `SESSION_SECRET` / `ALLOW_LOCAL_AUTH`。
+- 本地调试小程序：微信开发者工具打开 `miniprogram/`，详情里勾选「不校验合法域名」；
+  后端需对本机或内网 HTTPS（或工具关闭域名校验后用 http 开发地址）。
+- 不要把 `API_KEY` / `WECHAT_SECRET` 写进小程序代码；密钥只留在服务端 `.env`。
+- 上线需：备案域名 + HTTPS，并在微信公众平台配置 request / uploadFile 合法域名。

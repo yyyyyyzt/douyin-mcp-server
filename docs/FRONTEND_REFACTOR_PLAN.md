@@ -2,6 +2,8 @@
 
 > 目标：把当前偏工程工具的 WebUI，重构为完全不懂 AI 的用户也能在手机上顺手使用的自装助手。
 > 后续 agent 开发前必须先读本文件，再读 `docs/DESIGN.md` 与 `PROGRESS.md`。
+> 微信原生小程序前端应复用本文件的信息架构与文案原则，实现细节见
+> [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
 
 ---
 
