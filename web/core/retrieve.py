@@ -38,15 +38,17 @@ def _ngrams(text: str, n: int = 3) -> list[str]:
     return list({s[i : i + n] for i in range(len(s) - n + 1)})
 
 
-def _like_fallback(conn: sqlite3.Connection, query: str, top_k: int) -> list[dict]:
+def _like_fallback(
+    conn: sqlite3.Connection, query: str, user_id: int, top_k: int
+) -> list[dict]:
     like = f"%{query}%"
     rows = conn.execute(
         """
         SELECT * FROM knowledge_cards
-        WHERE title LIKE ? OR raw_text LIKE ?
+        WHERE user_id = ? AND (title LIKE ? OR raw_text LIKE ?)
         ORDER BY id DESC LIMIT ?
         """,
-        (like, like, top_k),
+        (user_id, like, like, top_k),
     ).fetchall()
     results = []
     for r in rows:
@@ -56,14 +58,16 @@ def _like_fallback(conn: sqlite3.Connection, query: str, top_k: int) -> list[dic
     return results
 
 
-def _overlap_search(conn: sqlite3.Connection, query: str, top_k: int) -> list[dict]:
+def _overlap_search(
+    conn: sqlite3.Connection, query: str, user_id: int, top_k: int
+) -> list[dict]:
     """3-gram 重叠召回：score = 命中的查询片段数（越多越相关）。"""
     grams = _ngrams(query, 3)
     if not grams:
         return []
-    agg: dict[int, list] = {}  # card_id -> [hit_count, row_dict]
+    agg: dict[int, list] = {}
     for g in grams:
-        for r in db.search_cards(conn, g, top_k=max(top_k * 4, 20)):
+        for r in db.search_cards(conn, g, user_id, top_k=max(top_k * 4, 20)):
             cur = agg.get(r["id"])
             if cur:
                 cur[0] += 1
@@ -78,24 +82,26 @@ def _overlap_search(conn: sqlite3.Connection, query: str, top_k: int) -> list[di
     return results
 
 
-def retrieve(conn: sqlite3.Connection, query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+def retrieve(
+    conn: sqlite3.Connection,
+    query: str,
+    user_id: int,
+    top_k: int = DEFAULT_TOP_K,
+) -> list[dict]:
     """召回与查询最相关的若干卡片（每条带正向 score，越大越相关）。"""
     q = (query or "").strip()
     if not q:
         return []
     if len(q) < 3:
-        return _like_fallback(conn, q, top_k)
+        return _like_fallback(conn, q, user_id, top_k)
 
-    # 1) 整句短语 FTS（短关键词查询的精确路径）
-    res = db.search_cards(conn, q, top_k=top_k)
+    res = db.search_cards(conn, q, user_id, top_k=top_k)
     if res:
         return res
-    # 2) 3-gram 重叠召回（对话式长问题的主路径）
-    res = _overlap_search(conn, q, top_k)
+    res = _overlap_search(conn, q, user_id, top_k)
     if res:
         return res
-    # 3) 整句 LIKE 兜底
-    return _like_fallback(conn, q, top_k)
+    return _like_fallback(conn, q, user_id, top_k)
 
 
 def is_grounded(results: list[dict], min_score: Optional[float] = None) -> bool:

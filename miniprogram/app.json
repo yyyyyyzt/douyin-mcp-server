@@ -1,0 +1,35 @@
+{
+  "pages": [
+    "pages/collect/collect",
+    "pages/knowledge/knowledge",
+    "pages/chat/chat",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarTitleText": "自装助手",
+    "navigationBarBackgroundColor": "#FFF8F5",
+    "backgroundColor": "#FFF8F5"
+  },
+  "tabBar": {
+    "color": "#9CA3AF",
+    "selectedColor": "#FF6B4A",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/collect/collect",
+        "text": "收集"
+      },
+      {
+        "pagePath": "pages/knowledge/knowledge",
+        "text": "知识库"
+      },
+      {
+        "pagePath": "pages/chat/chat",
+        "text": "问答"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

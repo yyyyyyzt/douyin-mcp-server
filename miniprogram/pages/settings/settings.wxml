@@ -1,0 +1,7 @@
+<view class="page safe-bottom">
+  <view class="card">
+    <text class="label">API 地址</text>
+    <text class="value">{{apiBase}}</text>
+  </view>
+  <view class="hint">高级设置默认弱化；密钥与模型在服务端 .env 配置。</view>
+</view>

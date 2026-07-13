@@ -19,10 +19,10 @@
 
 ## 🚦 当前进度
 
-- ✅ 任务 1~9：知识库 / LLM / 录入 / 问答 / 防幻觉 / Web 三 Tab + PWA 手机极简 UI（MVP 完成）。
-- ⬜ 任务 10~14：微信登录 + 按 `user_id` 隔离 → Web 本地登录兼容 → 原生小程序三 Tab MVP → 测试与部署清单。
+- ✅ 任务 1~9：知识库 / LLM / 录入 / 问答 / 防幻觉 / Web 三 Tab + PWA 手机极简 UI。
+- ✅ 任务 10~14：微信登录 + 按 `user_id` 隔离、Web `ALLOW_LOCAL_AUTH` 兼容、原生小程序脚手架、后端测试补齐。
 
-详见 [`PROGRESS.md`](PROGRESS.md) 与 [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md)。
+详见 [`PROGRESS.md`](PROGRESS.md)。
 
 ## ⚡ 快速开始
 

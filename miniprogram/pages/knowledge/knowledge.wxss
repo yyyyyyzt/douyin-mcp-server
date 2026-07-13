@@ -1,0 +1,49 @@
+.page { padding: 32rpx; }
+.search {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+.chips { white-space: nowrap; margin-bottom: 24rpx; }
+.chip {
+  display: inline-block;
+  padding: 12rpx 24rpx;
+  margin-right: 12rpx;
+  background: #fff;
+  border-radius: 999rpx;
+  color: #6b7280;
+}
+.chip.active { background: #ffede8; color: #ff6b4a; }
+.card {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+.title { font-weight: 600; display: block; margin-bottom: 8rpx; }
+.excerpt {
+  color: #6b7280;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hint { color: #9ca3af; text-align: center; margin-top: 80rpx; }
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.35);
+  top: 0;
+}
+.sheet-inner {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 32rpx;
+  max-height: 70vh;
+  overflow: auto;
+}
+.body { display: block; margin: 16rpx 0 24rpx; color: #374151; white-space: pre-wrap; }
+.actions { display: flex; gap: 16rpx; }

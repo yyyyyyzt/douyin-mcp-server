@@ -1,0 +1,18 @@
+page {
+  background: #fff8f5;
+  color: #1f2937;
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #ff8a65, #ff6b4a);
+  color: #fff;
+  border-radius: 24rpx;
+  text-align: center;
+  padding: 24rpx;
+}
+
+.safe-bottom {
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+}

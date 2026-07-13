@@ -1,7 +1,4 @@
-"""API 测试（TDD）：/api/cards/from-link 抖音链接异步入库 + 进度查询 + 去重。
-
-全部 mock `extract_text`（抖音解析/转写）与 LLM（结构化），不触网、不依赖真实视频。
-"""
+"""API 测试（TDD）：/api/cards/from-link 抖音链接异步入库 + 进度查询 + 去重。"""
 
 import json
 import time
@@ -11,11 +8,10 @@ from fastapi.testclient import TestClient
 
 import app as webapp
 from core import db
+from tests.helpers import auth_headers, clear_app_overrides, ensure_test_user, override_current_user
 
 
 class FakeLLM:
-    """按调用顺序吐出预设的 chat 返回内容。"""
-
     def __init__(self, outputs):
         self._outputs = list(outputs)
 
@@ -56,10 +52,10 @@ def _make_fake_extract(result=FAKE_EXTRACT_RESULT, calls=None):
 
 @pytest.fixture()
 def env(tmp_path):
-    """提供 TestClient + 独立 sqlite 文件，覆盖 db_path / llm / extractor 依赖。"""
     db_path = str(tmp_path / "link.db")
     conn = db.connect(db_path)
     db.init_db(conn)
+    user = ensure_test_user(conn)
 
     fake_llm = FakeLLM([_card_payload(SAMPLE_CARDS)])
     extract_calls = []
@@ -67,22 +63,24 @@ def env(tmp_path):
 
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: fake_extract
+    override_current_user(user)
     original_resolve = webapp.resolve_llm_client
     webapp.resolve_llm_client = lambda llm_model="": fake_llm
+    headers = auth_headers(user)
 
     client = TestClient(webapp.app)
-    yield client, conn, db_path, extract_calls
+    yield client, conn, db_path, extract_calls, user, headers
 
     webapp.resolve_llm_client = original_resolve
-    webapp.app.dependency_overrides.clear()
+    clear_app_overrides()
     conn.close()
 
 
-def _wait_task(client, task_id, timeout=5.0):
+def _wait_task(client, task_id, headers, timeout=5.0):
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
-        resp = client.get(f"/api/cards/task/{task_id}")
+        resp = client.get(f"/api/cards/task/{task_id}", headers=headers)
         assert resp.status_code == 200
         last = resp.json()["task"]
         if last["status"] in ("done", "duplicate", "failed"):
@@ -92,15 +90,15 @@ def _wait_task(client, task_id, timeout=5.0):
 
 
 def test_from_link_creates_card(env):
-    client, conn, _, extract_calls = env
-    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/abc/"})
+    client, conn, _, extract_calls, user, headers = env
+    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/abc/"}, headers=headers)
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
     task_id = body["task_id"]
     assert task_id
 
-    task = _wait_task(client, task_id)
+    task = _wait_task(client, task_id, headers)
     assert task["status"] == "done"
     assert task["video_id"] == "vid_abc123"
     assert len(task["cards"]) == 1
@@ -111,16 +109,15 @@ def test_from_link_creates_card(env):
     assert card["source_url"] == "https://v.douyin.com/abc/"
     assert card["video_id"] == "vid_abc123"
 
-    # 已持久化，且 extractor 收到链接
-    assert db.get_card_by_video_id(conn, "vid_abc123") is not None
+    assert db.get_card_by_video_id(conn, "vid_abc123", user["id"]) is not None
     assert extract_calls and extract_calls[0]["url"] == "https://v.douyin.com/abc/"
 
 
 def test_from_link_dedup_blocks_reimport(env):
-    client, conn, _, _ = env
-    # 预先插入同 video_id 的卡片
+    client, conn, _, _, user, headers = env
     db.insert_card(
         conn,
+        user["id"],
         title="已存在的瓦工卡片",
         raw_text="旧文案",
         structured_json=json.dumps({"title": "已存在的瓦工卡片", "content": "旧文案"}, ensure_ascii=False),
@@ -129,40 +126,38 @@ def test_from_link_dedup_blocks_reimport(env):
         video_id="vid_abc123",
     )
 
-    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/abc/"})
+    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/abc/"}, headers=headers)
     task_id = resp.json()["task_id"]
-    task = _wait_task(client, task_id)
+    task = _wait_task(client, task_id, headers)
 
     assert task["status"] == "duplicate"
     assert task["duplicate"] is True
     assert task["video_id"] == "vid_abc123"
-    # 命中已有卡片，未重复插入
-    rows = db.list_cards(conn)
+    rows = db.list_cards(conn, user["id"])
     assert len(rows) == 1
     assert task["cards"][0]["title"] == "已存在的瓦工卡片"
 
 
 def test_from_link_extract_failure(env):
-    client, conn, db_path, _ = env
+    client, conn, db_path, _, user, headers = env
 
     def _boom(url, api_key=None, show_progress=False, **kwargs):
         raise RuntimeError("解析视频失败：list index out of range")
 
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: _boom
 
-    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/bad/"})
+    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/bad/"}, headers=headers)
     task_id = resp.json()["task_id"]
-    task = _wait_task(client, task_id)
+    task = _wait_task(client, task_id, headers)
 
     assert task["status"] == "failed"
     assert task["error"]
     assert "list index out of range" in task["error"]
-    # 失败不应产生卡片
-    assert db.list_cards(conn) == []
+    assert db.list_cards(conn, user["id"]) == []
 
 
 def test_from_link_empty_transcript_fails(env):
-    client, conn, _, _ = env
+    client, conn, _, _, user, headers = env
     empty_result = {
         "video_info": {"video_id": "vid_empty", "title": "无人声视频", "url": "x"},
         "text": "   ",
@@ -170,42 +165,41 @@ def test_from_link_empty_transcript_fails(env):
     }
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: _make_fake_extract(result=empty_result)
 
-    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/silent/"})
+    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/silent/"}, headers=headers)
     task_id = resp.json()["task_id"]
-    task = _wait_task(client, task_id)
+    task = _wait_task(client, task_id, headers)
 
     assert task["status"] == "failed"
     assert "空" in task["error"]
-    assert db.list_cards(conn) == []
+    assert db.list_cards(conn, user["id"]) == []
 
 
 def test_from_link_empty_url_returns_400(env):
-    client, _, _, _ = env
-    resp = client.post("/api/cards/from-link", json={"url": "   "})
+    client, _, _, _, _, headers = env
+    resp = client.post("/api/cards/from-link", json={"url": "   "}, headers=headers)
     assert resp.status_code == 400
 
 
 def test_task_not_found_returns_404(env):
-    client, _, _, _ = env
-    resp = client.get("/api/cards/task/does-not-exist")
+    client, _, _, _, _, headers = env
+    resp = client.get("/api/cards/task/does-not-exist", headers=headers)
     assert resp.status_code == 404
 
 
 def test_from_link_multi_cards_merged_to_one(env):
-    """即使 LLM 返回多条，也只入库一张卡片。"""
-    client, conn, _, _ = env
+    client, conn, _, _, user, headers = env
     multi = [
         {"title": "瓦工细节A", "content": "细节 A 正文"},
         {"title": "防水细节B", "content": "细节 B 正文"},
     ]
     webapp.resolve_llm_client = lambda llm_model="": FakeLLM([_card_payload(multi)])
 
-    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/multi/"})
+    resp = client.post("/api/cards/from-link", json={"url": "https://v.douyin.com/multi/"}, headers=headers)
     task_id = resp.json()["task_id"]
-    task = _wait_task(client, task_id)
+    task = _wait_task(client, task_id, headers)
 
     assert task["status"] == "done"
     assert len(task["cards"]) == 1
     assert task["cards"][0]["video_id"] == "vid_abc123"
     assert "细节 A" in task["cards"][0]["raw_text"]
-    assert db.list_cards(conn) and len(db.list_cards(conn)) == 1
+    assert len(db.list_cards(conn, user["id"])) == 1

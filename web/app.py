@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video" / "scripts"
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,6 +37,8 @@ from douyin_downloader import get_video_info, extract_text
 
 # 核心模块：知识库存储、LLM、结构化、检索、问答
 from core import db, structure, retrieve, qa, documents, prompts
+from core import auth as auth_core
+from core import wechat as wechat_auth
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
 from core.documents import DocumentParseError
@@ -66,6 +69,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="自装助手", version="2.0.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 # 静态资源（PWA 图标 / manifest）
@@ -130,6 +140,34 @@ def get_extractor() -> Callable:
     return extract_text
 
 
+def get_current_user(request: Request, conn=Depends(get_db)) -> dict:
+    """校验 Bearer token 并返回当前用户。"""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登录")
+    token = auth_header[7:].strip()
+    try:
+        payload = auth_core.decode_token(token)
+    except auth_core.AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    user = db.get_user_by_id(conn, int(payload["uid"]))
+    if user is None or user["openid"] != payload["oid"]:
+        raise HTTPException(status_code=401, detail="会话无效")
+    return user
+
+
+def _local_auth_enabled() -> bool:
+    return os.getenv("ALLOW_LOCAL_AUTH", "0").strip().lower() in ("1", "true", "yes")
+
+
+def _assert_task_owner(task: Optional[dict], user_id: int) -> dict:
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="无权访问此任务")
+    return task
+
+
 def _serialize_card(row: dict) -> dict:
     """把数据库行转为 API 卡片。"""
     return dict(row)
@@ -159,6 +197,38 @@ class ExtractResponse(BaseModel):
     text: str = ""
     download_url: str = ""
     error: str = ""
+
+
+class WechatLoginRequest(BaseModel):
+    code: str
+
+
+@app.post("/api/auth/wechat/login")
+async def wechat_login(req: WechatLoginRequest, conn=Depends(get_db)):
+    """小程序 wx.login 的 code → 会话 token。"""
+    appid = os.getenv("WECHAT_APPID", "").strip()
+    secret = os.getenv("WECHAT_SECRET", "").strip()
+    try:
+        data = wechat_auth.code2session(req.code, appid, secret)
+    except wechat_auth.WechatAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    user_id = db.ensure_user(conn, data["openid"], data.get("unionid"))
+    db.touch_user_login(conn, user_id)
+    user = db.get_user_by_id(conn, user_id)
+    token = auth_core.issue_token(user_id, user["openid"])
+    return {"success": True, "token": token, "user": user}
+
+
+@app.post("/api/auth/local")
+async def local_login(conn=Depends(get_db)):
+    """Web 兼容本地登录（仅 ALLOW_LOCAL_AUTH=1）。"""
+    if not _local_auth_enabled():
+        raise HTTPException(status_code=403, detail="本地登录未启用")
+    user_id = db.ensure_local_web_user(conn)
+    db.touch_user_login(conn, user_id)
+    user = db.get_user_by_id(conn, user_id)
+    token = auth_core.issue_token(user_id, user["openid"])
+    return {"success": True, "token": token, "user": user}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -252,6 +322,7 @@ async def get_info(req: VideoRequest):
 @app.post("/api/video/extract")
 async def extract_transcript_async(
     req: VideoRequest,
+    user: dict = Depends(get_current_user),
     extractor: Callable = Depends(get_extractor),
 ):
     """异步转写抖音视频：解析 → 下载(视频可缓存) → 转写(每次执行) → AI 整理，返回 task_id 供轮询。"""
@@ -266,7 +337,7 @@ async def extract_transcript_async(
     api_key = settings.api_key
     asr_model = resolve_asr_model(req.asr_model)
     llm = resolve_llm_client(req.llm_model)
-    task_id = _new_extract_task(url)
+    task_id = _new_extract_task(url, user["id"])
     worker = threading.Thread(
         target=_run_extract_task,
         args=(task_id, url, api_key, asr_model, extractor, llm),
@@ -277,19 +348,18 @@ async def extract_transcript_async(
 
 
 @app.get("/api/video/extract/task/{task_id}")
-async def get_extract_task(task_id: str):
+async def get_extract_task(task_id: str, user: dict = Depends(get_current_user)):
     """查询转写任务进度与结构化预览结果。"""
-    task = _get_extract_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    task = _assert_task_owner(_get_extract_task(task_id), user["id"])
     return {"success": True, "task": task}
 
 
-def _new_extract_task(url: str) -> str:
+def _new_extract_task(url: str, user_id: int) -> str:
     task_id = uuid.uuid4().hex
     with _tasks_lock:
         _extract_tasks[task_id] = {
             "task_id": task_id,
+            "user_id": user_id,
             "status": "pending",
             "phase": _TASK_PHASES["pending"],
             "progress": 0,
@@ -479,7 +549,10 @@ class CardSaveRequest(BaseModel):
 
 
 @app.post("/api/cards/structure")
-async def structure_card_preview(req: CardStructureRequest):
+async def structure_card_preview(
+    req: CardStructureRequest,
+    user: dict = Depends(get_current_user),
+):
     """将文案 AI 整理为结构化预览（标题 + 内容），不入库。"""
     text = (req.text or "").strip()
     if not text:
@@ -504,16 +577,21 @@ async def structure_card_preview(req: CardStructureRequest):
 
 
 @app.post("/api/cards/save")
-async def save_card(req: CardSaveRequest, conn=Depends(get_db)):
+async def save_card(
+    req: CardSaveRequest,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
     """保存单条知识卡片（纯存储，不调用 AI）。"""
     title = (req.title or "").strip()
     content = (req.content or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="内容不能为空")
 
+    user_id = user["id"]
     video_id = (req.video_id or "").strip() or None
     if video_id:
-        existing = db.get_card_by_video_id(conn, video_id)
+        existing = db.get_card_by_video_id(conn, video_id, user_id)
         if existing:
             raise HTTPException(
                 status_code=409,
@@ -527,6 +605,7 @@ async def save_card(req: CardSaveRequest, conn=Depends(get_db)):
     try:
         card_id = db.insert_card(
             conn,
+            user_id,
             title=title or None,
             raw_text=content,
             structured_json=json.dumps(structured, ensure_ascii=False),
@@ -537,12 +616,15 @@ async def save_card(req: CardSaveRequest, conn=Depends(get_db)):
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=409, detail="该视频已入库")
 
-    return {"success": True, "card": _serialize_card(db.get_card(conn, card_id))}
+    return {"success": True, "card": _serialize_card(db.get_card(conn, card_id, user_id))}
 
 
 # 兼容旧路径：仅整理预览，不入库（请优先使用 /api/cards/structure）
 @app.post("/api/cards/from-text")
-async def structure_card_legacy(req: CardStructureRequest):
+async def structure_card_legacy(
+    req: CardStructureRequest,
+    user: dict = Depends(get_current_user),
+):
     """已废弃入库语义：与 /api/cards/structure 相同，仅返回整理预览。"""
     return await structure_card_preview(req)
 
@@ -571,11 +653,12 @@ _extract_tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
 
 
-def _new_task(url: str) -> str:
+def _new_task(url: str, user_id: int) -> str:
     task_id = uuid.uuid4().hex
     with _tasks_lock:
         _tasks[task_id] = {
             "task_id": task_id,
+            "user_id": user_id,
             "status": "pending",
             "phase": _TASK_PHASES["pending"],
             "progress": 0,
@@ -616,6 +699,7 @@ def _run_import_task(
     extractor: Callable,
     db_path: str,
     llm,
+    user_id: int,
 ) -> None:
     """后台线程：解析/转写 -> 去重 -> 结构化 -> 入库，并实时更新任务进度。"""
     conn = db.connect(db_path)
@@ -650,7 +734,7 @@ def _run_import_task(
 
         # 2) 去重：同一视频不重复入库
         if video_id:
-            existing = db.get_card_by_video_id(conn, video_id)
+            existing = db.get_card_by_video_id(conn, video_id, user_id)
             if existing:
                 _update_task(
                     task_id,
@@ -676,6 +760,7 @@ def _run_import_task(
             structured["transcript"] = text
             card_id = db.insert_card(
                 conn,
+                user_id,
                 stage=stage or card.get("stage"),
                 title=card["title"],
                 raw_text=card["raw_text"],
@@ -685,7 +770,7 @@ def _run_import_task(
                 video_id=video_id,
             )
         except sqlite3.IntegrityError:
-            existing = db.get_card_by_video_id(conn, video_id) if video_id else None
+            existing = db.get_card_by_video_id(conn, video_id, user_id) if video_id else None
             _update_task(
                 task_id,
                 status="duplicate",
@@ -695,7 +780,7 @@ def _run_import_task(
                 cards=[_serialize_card(existing)] if existing else [],
             )
             return
-        created = [_serialize_card(db.get_card(conn, card_id))]
+        created = [_serialize_card(db.get_card(conn, card_id, user_id))]
 
         _update_task(task_id, status="done", progress=100, message="入库完成", cards=created)
     except Exception as e:  # noqa: BLE001 兜底：后台任务绝不应静默卡死
@@ -715,6 +800,7 @@ class CardFromLinkRequest(BaseModel):
 @app.post("/api/cards/from-link")
 async def create_cards_from_link(
     req: CardFromLinkRequest,
+    user: dict = Depends(get_current_user),
     db_path: str = Depends(get_db_path),
     extractor: Callable = Depends(get_extractor),
 ):
@@ -730,10 +816,10 @@ async def create_cards_from_link(
     api_key = settings.api_key
     asr_model = resolve_asr_model(req.asr_model)
     llm = resolve_llm_client(req.llm_model)
-    task_id = _new_task(url)
+    task_id = _new_task(url, user["id"])
     worker = threading.Thread(
         target=_run_import_task,
-        args=(task_id, url, req.stage, api_key, asr_model, extractor, db_path, llm),
+        args=(task_id, url, req.stage, api_key, asr_model, extractor, db_path, llm, user["id"]),
         daemon=True,
     )
     worker.start()
@@ -741,25 +827,31 @@ async def create_cards_from_link(
 
 
 @app.get("/api/cards/task/{task_id}")
-async def get_import_task(task_id: str):
+async def get_import_task(task_id: str, user: dict = Depends(get_current_user)):
     """查询链接录入任务的进度/结果。"""
-    task = _get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    task = _assert_task_owner(_get_task(task_id), user["id"])
     return {"success": True, "task": task}
 
 
 @app.get("/api/cards")
-async def list_cards(stage: Optional[str] = None, conn=Depends(get_db)):
+async def list_cards(
+    stage: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
     """列出知识卡片，可按阶段筛选。"""
-    rows = db.list_cards(conn, stage=stage)
+    rows = db.list_cards(conn, user["id"], stage=stage)
     return {"success": True, "cards": [_serialize_card(r) for r in rows]}
 
 
 @app.get("/api/cards/{card_id}")
-async def get_card_detail(card_id: int, conn=Depends(get_db)):
+async def get_card_detail(
+    card_id: int,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
     """获取单张卡片详情。"""
-    row = db.get_card(conn, card_id)
+    row = db.get_card(conn, card_id, user["id"])
     if row is None:
         raise HTTPException(status_code=404, detail="卡片不存在")
     return {"success": True, "card": _serialize_card(row)}
@@ -772,13 +864,19 @@ class CardUpdateRequest(BaseModel):
 
 
 @app.put("/api/cards/{card_id}")
-async def update_card_endpoint(card_id: int, req: CardUpdateRequest, conn=Depends(get_db)):
+async def update_card_endpoint(
+    card_id: int,
+    req: CardUpdateRequest,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
     """编辑卡片标题与正文，不重新调 AI，同步重写 structured_json。"""
     provided = req.model_dump(exclude_unset=True)
     if not provided:
         raise HTTPException(status_code=400, detail="未提供任何可更新字段")
 
-    row = db.get_card(conn, card_id)
+    user_id = user["id"]
+    row = db.get_card(conn, card_id, user_id)
     if row is None:
         raise HTTPException(status_code=404, detail="卡片不存在")
     card = dict(row)
@@ -799,14 +897,18 @@ async def update_card_endpoint(card_id: int, req: CardUpdateRequest, conn=Depend
     if "raw_text" in provided:
         fields["raw_text"] = new_raw
 
-    db.update_card(conn, card_id, **fields)
-    return {"success": True, "card": _serialize_card(db.get_card(conn, card_id))}
+    db.update_card(conn, card_id, user_id, **fields)
+    return {"success": True, "card": _serialize_card(db.get_card(conn, card_id, user_id))}
 
 
 @app.delete("/api/cards/{card_id}")
-async def delete_card_endpoint(card_id: int, conn=Depends(get_db)):
+async def delete_card_endpoint(
+    card_id: int,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
     """删除卡片（FTS 索引由触发器自动同步）。"""
-    if not db.delete_card(conn, card_id):
+    if not db.delete_card(conn, card_id, user["id"]):
         raise HTTPException(status_code=404, detail="卡片不存在")
     return {"success": True, "deleted": card_id}
 
@@ -821,7 +923,10 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/documents/parse")
-async def parse_uploaded_document(file: UploadFile = File(...)):
+async def parse_uploaded_document(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
     """解析上传的 PDF / Excel 报价单，返回提取文本（供问答/合同审查）。"""
     filename = (file.filename or "").strip()
     if not filename:
@@ -837,7 +942,11 @@ async def parse_uploaded_document(file: UploadFile = File(...)):
 
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest, conn=Depends(get_db)):
+async def chat_endpoint(
+    req: ChatRequest,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
     """基于知识库的问答：检索 → 拼 prompt → LLM → 带引用回答（防幻觉）。
 
     可附带 document_text/document_name（报价单 PDF/Excel 解析结果），
@@ -856,7 +965,7 @@ async def chat_endpoint(req: ChatRequest, conn=Depends(get_db)):
         }
 
     top_k = req.top_k if (req.top_k and req.top_k > 0) else retrieve.DEFAULT_TOP_K
-    results = retrieve.retrieve(conn, question, top_k=top_k)
+    results = retrieve.retrieve(conn, question, user["id"], top_k=top_k)
     grounded = retrieve.is_grounded(results)
     cards = results if grounded else []
 

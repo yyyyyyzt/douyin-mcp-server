@@ -1,0 +1,45 @@
+<view class="page safe-bottom">
+  <input class="search" placeholder="搜防水、报价、验收..." value="{{search}}" bindinput="onSearch" />
+  <scroll-view scroll-x class="chips">
+    <view
+      wx:for="{{stages}}"
+      wx:key="*this"
+      class="chip {{stage === item ? 'active' : ''}}"
+      data-stage="{{item}}"
+      bindtap="onStage"
+    >{{item}}</view>
+  </scroll-view>
+
+  <view wx:if="{{loading}}" class="hint">加载中…</view>
+  <view wx:elif="{{!filtered.length}}" class="hint">还没有知识，去收集第一个装修经验</view>
+
+  <view
+    wx:for="{{filtered}}"
+    wx:key="id"
+    class="card"
+    data-id="{{item.id}}"
+    bindtap="openDetail"
+  >
+    <text class="title">{{item.title || '未命名'}}</text>
+    <text class="excerpt">{{item.raw_text}}</text>
+  </view>
+
+  <view wx:if="{{detail}}" class="sheet">
+    <view class="sheet-inner">
+      <block wx:if="{{!editing}}">
+        <text class="title">{{detail.title}}</text>
+        <text class="body">{{detail.raw_text}}</text>
+        <view class="actions">
+          <button size="mini" bindtap="toggleEdit">编辑</button>
+          <button size="mini" type="warn" bindtap="deleteDetail">删除</button>
+          <button size="mini" bindtap="closeDetail">关闭</button>
+        </view>
+      </block>
+      <block wx:else>
+        <input value="{{detail.title}}" bindinput="onDetailTitle" />
+        <textarea value="{{detail.raw_text}}" bindinput="onDetailBody" />
+        <button class="btn-primary" bindtap="saveDetail">保存</button>
+      </block>
+    </view>
+  </view>
+</view>

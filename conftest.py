@@ -20,3 +20,5 @@ sys.path.insert(0, str(ROOT / "douyin-video" / "scripts"))
 def _test_api_key(monkeypatch):
     """测试环境默认提供 API Key（模拟 .env 已配置）。"""
     monkeypatch.setenv("API_KEY", "sk-test")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("ALLOW_LOCAL_AUTH", "1")

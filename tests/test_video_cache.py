@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import app as webapp
 from core import db
+from tests.helpers import auth_headers, clear_app_overrides, ensure_test_user, override_current_user
 
 
 class FakeLLM:
@@ -43,31 +44,35 @@ def extract_env(tmp_path):
     db_path = str(tmp_path / "extract.db")
     conn = db.connect(db_path)
     db.init_db(conn)
+    user = ensure_test_user(conn)
 
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: _fake_extract
+    override_current_user(user)
     original_resolve = webapp.resolve_llm_client
     webapp.resolve_llm_client = lambda llm_model="": FakeLLM()
+    headers = auth_headers(user)
 
     client = TestClient(webapp.app)
-    yield client, conn, tmp_path
+    yield client, conn, tmp_path, user, headers
     webapp.resolve_llm_client = original_resolve
-    webapp.app.dependency_overrides.clear()
+    clear_app_overrides()
     conn.close()
 
 
 def test_extract_task_returns_preview(extract_env):
-    client, _, _ = extract_env
+    client, _, _, _, headers = extract_env
     resp = client.post(
         "/api/video/extract",
         json={"url": "https://v.douyin.com/test/"},
+        headers=headers,
     )
     assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
     task = None
     for _ in range(50):
-        r = client.get(f"/api/video/extract/task/{task_id}")
+        r = client.get(f"/api/video/extract/task/{task_id}", headers=headers)
         task = r.json()["task"]
         if task["status"] in ("done", "failed"):
             break
@@ -81,7 +86,7 @@ def test_extract_task_returns_preview(extract_env):
 
 
 def test_save_card_with_video_id(extract_env):
-    client, conn, _ = extract_env
+    client, conn, _, user, headers = extract_env
     resp = client.post(
         "/api/cards/save",
         json={
@@ -91,15 +96,17 @@ def test_save_card_with_video_id(extract_env):
             "source_url": "https://v.douyin.com/x/",
             "transcript": "原始转写",
         },
+        headers=headers,
     )
     assert resp.status_code == 200
     card = resp.json()["card"]
     assert card["video_id"] == "vid_unique_001"
-    assert db.get_card_by_video_id(conn, "vid_unique_001") is not None
+    assert db.get_card_by_video_id(conn, "vid_unique_001", user["id"]) is not None
 
     dup = client.post(
         "/api/cards/save",
         json={"title": "重复", "content": "x", "video_id": "vid_unique_001"},
+        headers=headers,
     )
     assert dup.status_code == 409
 
@@ -115,7 +122,6 @@ def test_video_cache_hit_skips_download(tmp_path, monkeypatch):
 
     vid = "vid_no_transcript_cache"
     (cache / f"{vid}.mp4").write_bytes(b"x" * 2048)
-    # 遗留的转写缓存文件（应被忽略）
     (cache / f"{vid}.transcript.txt").write_text("旧缓存转写", encoding="utf-8")
 
     transcribe_calls = []

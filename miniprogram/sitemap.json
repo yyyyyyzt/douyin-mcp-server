@@ -1,0 +1,4 @@
+{
+  "desc": "自装助手小程序",
+  "rules": [{ "action": "allow", "page": "*" }]
+}

@@ -1,0 +1,17 @@
+<view class="page safe-bottom">
+  <view class="hero">把刷到的装修经验存成自己的知识。</view>
+  <textarea class="input" placeholder="粘贴抖音分享链接或装修笔记" value="{{input}}" bindinput="onInput" />
+  <view class="row">
+    <button size="mini" bindtap="pasteClipboard">粘贴</button>
+  </view>
+  <button class="btn-primary" loading="{{busy}}" disabled="{{busy}}" bindtap="onSave">保存到知识库</button>
+  <view wx:if="{{busy}}" class="progress">
+    <text>{{steps[step]}}</text>
+    <progress percent="{{progress}}" stroke-width="4" activeColor="#FF6B4A" />
+  </view>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+  <view wx:if="{{lastCard}}" class="preview">
+    <text class="preview-title">{{lastCard.title}}</text>
+    <text class="preview-body">{{lastCard.raw_text}}</text>
+  </view>
+</view>
