@@ -58,7 +58,7 @@
         adjust-position="{{true}}"
         cursor-spacing="24"
         bindinput="onInput"
-        bind:tap="send"
+        bindconfirm="onSendConfirm"
       />
       <t-button
         theme="primary"

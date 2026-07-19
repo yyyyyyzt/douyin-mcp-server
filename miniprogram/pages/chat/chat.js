@@ -33,6 +33,10 @@ Page({
     this.setData({ input: e.detail.value });
   },
 
+  onSendConfirm() {
+    this.send();
+  },
+
   onScenarioTap(e) {
     const { id } = e.currentTarget.dataset;
     const scenario = QUICK_SCENARIOS.find((s) => s.id === id);
