@@ -14,6 +14,7 @@
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：架构 / 数据模型 / 接口契约 / 防幻觉策略 / 关键决策 |
 | [`docs/FRONTEND_REFACTOR_PLAN.md`](docs/FRONTEND_REFACTOR_PLAN.md) | 面向 AI 零基础手机用户的前端重构规划 |
 | [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md) | 微信原生小程序 + 用户隔离改造计划（已确认可行）|
+| [`docs/MINIPROGRAM_UI_OPTIMIZATION.md`](docs/MINIPROGRAM_UI_OPTIMIZATION.md) | 小程序 UI 优化建议（Tab 固定、TDesign、布局）|
 | [`PROGRESS.md`](PROGRESS.md) | 开发进度、任务分解与验收标准、新 agent 上手指南 |
 | [`AGENTS.md`](AGENTS.md) | 云端 agent 环境说明（uv / 测试 / 运行方式）|
 

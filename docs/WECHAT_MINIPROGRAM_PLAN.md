@@ -100,6 +100,8 @@ miniprogram/
 
 UI 文案与交互遵循 [FRONTEND_REFACTOR_PLAN.md](FRONTEND_REFACTOR_PLAN.md)（不出现 LLM/ASR 等词；底部 Tab + safe-area）。
 
+**UI 优化（Tab 固定、布局、TDesign）**：见 [MINIPROGRAM_UI_OPTIMIZATION.md](MINIPROGRAM_UI_OPTIMIZATION.md)。
+
 不复用 `index.html` 的 Alpine/Tailwind：原生重写；API 层逻辑从现有 `fetch` 流程平移到 `utils/request.js`。
 
 ---

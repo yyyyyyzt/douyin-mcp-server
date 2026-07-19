@@ -4,6 +4,7 @@
 > 后续 agent 开发前必须先读本文件，再读 `docs/DESIGN.md` 与 `PROGRESS.md`。
 > 微信原生小程序前端应复用本文件的信息架构与文案原则，实现细节见
 > [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
+> **小程序 UI 布局与组件库优化**见 [`MINIPROGRAM_UI_OPTIMIZATION.md`](MINIPROGRAM_UI_OPTIMIZATION.md)。
 
 ---
 
