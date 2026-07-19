@@ -1,6 +1,6 @@
 # 微信原生小程序 + 用户隔离改造计划
 
-> 状态：**已确认可行，待实施**（文档先行，代码未动）。
+> 状态：**已实施**（用户隔离 + 小程序 UI P0~P3）。详见 [`MINIPROGRAM_UI_OPTIMIZATION.md`](MINIPROGRAM_UI_OPTIMIZATION.md)。
 > 配套阅读：[`DESIGN.md`](DESIGN.md)、[`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)、[`../PROGRESS.md`](../PROGRESS.md)。
 
 ---

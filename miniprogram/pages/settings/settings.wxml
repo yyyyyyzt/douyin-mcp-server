@@ -1,7 +1,8 @@
-<view class="page safe-bottom">
-  <view class="card">
-    <text class="label">API 地址</text>
-    <text class="value">{{apiBase}}</text>
-  </view>
-  <view class="hint">高级设置默认弱化；密钥与模型在服务端 .env 配置。</view>
+<view class="settings-page">
+  <t-cell-group theme="card">
+    <t-cell title="API 地址" note="{{apiBase}}" />
+    <t-cell title="模型与密钥" note="在服务端 .env 配置，小程序不保存密钥" />
+    <t-cell title="对话能力" note="当前：知识问答、报价单；记账/预算/进度即将上线" />
+  </t-cell-group>
+  <view class="hint">本地调试请在微信开发者工具勾选「不校验合法域名」，并修改 app.js 中的 API 地址。</view>
 </view>

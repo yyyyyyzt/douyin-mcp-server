@@ -1,0 +1,5 @@
+.app-tab-bar {
+  --td-brand-color: #ff6b4a;
+  --td-tab-bar-active-color: #ff6b4a;
+  --td-tab-bar-active-bg: #ffede8;
+}

@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { syncTabBarForRoute } = require('../../utils/tab');
 
 const STAGES = ['全部', '水电', '防水', '泥木', '油漆', '验收', '其他'];
 
@@ -10,12 +11,24 @@ Page({
     search: '',
     stage: '全部',
     stages: STAGES,
+    detailVisible: false,
     detail: null,
     editing: false,
+    editTitle: '',
+    editBody: '',
   },
 
   onShow() {
+    syncTabBarForRoute(this);
     this.loadCards();
+  },
+
+  goSettings() {
+    wx.navigateTo({ url: '/pages/settings/settings' });
+  },
+
+  goCollect() {
+    wx.switchTab({ url: '/pages/collect/collect' });
   },
 
   applyFilter() {
@@ -52,34 +65,49 @@ Page({
     }
   },
 
-  onSearch(e) {
-    this.setData({ search: e.detail.value }, () => this.applyFilter());
+  onSearchChange(e) {
+    this.setData({ search: e.detail.value || '' }, () => this.applyFilter());
   },
 
-  onStage(e) {
+  onSearchClear() {
+    this.setData({ search: '' }, () => this.applyFilter());
+  },
+
+  onStageTap(e) {
     this.setData({ stage: e.currentTarget.dataset.stage }, () => this.applyFilter());
   },
 
   openDetail(e) {
     const id = e.currentTarget.dataset.id;
     const card = this.data.cards.find((c) => c.id === id);
-    if (card) this.setData({ detail: { ...card }, editing: false });
+    if (!card) return;
+    this.setData({
+      detailVisible: true,
+      detail: card,
+      editing: false,
+      editTitle: card.title || '',
+      editBody: card.raw_text || '',
+    });
   },
 
   closeDetail() {
-    this.setData({ detail: null, editing: false });
+    this.setData({ detailVisible: false, detail: null, editing: false });
+  },
+
+  onPopupVisibleChange(e) {
+    if (!e.detail.visible) this.closeDetail();
   },
 
   toggleEdit() {
     this.setData({ editing: true });
   },
 
-  onDetailTitle(e) {
-    this.setData({ 'detail.title': e.detail.value });
+  onEditTitle(e) {
+    this.setData({ editTitle: e.detail.value });
   },
 
-  onDetailBody(e) {
-    this.setData({ 'detail.raw_text': e.detail.value });
+  onEditBody(e) {
+    this.setData({ editBody: e.detail.value || '' });
   },
 
   async saveDetail() {
@@ -89,7 +117,7 @@ Page({
       await request({
         url: `/api/cards/${card.id}`,
         method: 'PUT',
-        data: { title: card.title, raw_text: card.raw_text },
+        data: { title: this.data.editTitle, raw_text: this.data.editBody },
       });
       wx.showToast({ title: '已保存', icon: 'success' });
       this.closeDetail();

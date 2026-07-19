@@ -1,1 +1,9 @@
-{ "navigationBarTitleText": "问答", "usingComponents": {} }
+{
+  "navigationBarTitleText": "问答",
+  "usingComponents": {
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "chat-message": "/components/chat-message/index"
+  }
+}

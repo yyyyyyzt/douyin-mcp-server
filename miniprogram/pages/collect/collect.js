@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { syncTabBarForRoute } = require('../../utils/tab');
 
 Page({
   data: {
@@ -7,12 +8,17 @@ Page({
     step: 0,
     progress: 0,
     steps: ['正在读取视频', '正在整理重点', '已保存'],
+    stepLabel: '',
     error: '',
     lastCard: null,
   },
 
+  onShow() {
+    syncTabBarForRoute(this);
+  },
+
   onInput(e) {
-    this.setData({ input: e.detail.value });
+    this.setData({ input: e.detail.value || '' });
   },
 
   pasteClipboard() {
@@ -23,6 +29,10 @@ Page({
     });
   },
 
+  goSettings() {
+    wx.navigateTo({ url: '/pages/settings/settings' });
+  },
+
   isLikelyLink(text) {
     return /douyin|v\.douyin|iesdouyin/i.test(text || '');
   },
@@ -30,16 +40,24 @@ Page({
   async onSave() {
     const input = (this.data.input || '').trim();
     if (!input || this.data.busy) return;
-    this.setData({ busy: true, error: '', step: 0, progress: 5 });
+    this.setData({
+      busy: true,
+      error: '',
+      step: 0,
+      progress: 5,
+      stepLabel: this.data.steps[0],
+      lastCard: null,
+    });
     try {
       if (this.isLikelyLink(input)) {
+        this.setData({ steps: ['正在读取视频', '正在整理重点', '已保存'] });
         await this.extractAndSave(input);
       } else {
-        this.setData({ steps: ['正在整理重点', '已保存'], step: 0 });
+        this.setData({ steps: ['正在整理重点', '已保存'], step: 0, stepLabel: '正在整理重点' });
         await this.structureAndSave(input);
       }
     } catch (e) {
-      this.setData({ error: e.message || '保存失败' });
+      this.setData({ error: e.message || '保存失败，请检查链接或稍后重试' });
     } finally {
       this.setData({ busy: false });
     }
@@ -52,7 +70,7 @@ Page({
       data: { url },
     });
     const preview = await this.pollExtract(start.task_id);
-    this.setData({ step: 1, progress: 75 });
+    this.setData({ step: 1, progress: 75, stepLabel: this.data.steps[1] });
     const saved = await request({
       url: '/api/cards/save',
       method: 'POST',
@@ -64,8 +82,14 @@ Page({
         transcript: preview.transcript,
       },
     });
-    this.setData({ step: 2, progress: 100, lastCard: saved.card, input: '' });
-    wx.showToast({ title: '已保存', icon: 'success' });
+    this.setData({
+      step: 2,
+      progress: 100,
+      stepLabel: this.data.steps[2],
+      lastCard: saved.card,
+      input: '',
+    });
+    wx.showToast({ title: '已保存到知识库', icon: 'success' });
   },
 
   pollExtract(taskId) {
@@ -89,9 +113,11 @@ Page({
             });
             return;
           }
+          const step = t.status === 'structuring' ? 1 : 0;
           this.setData({
             progress: Math.max(this.data.progress, t.progress || 10),
-            step: t.status === 'structuring' ? 1 : 0,
+            step,
+            stepLabel: this.data.steps[step] || t.message || '',
           });
         } catch (e) {
           /* retry */
@@ -108,7 +134,7 @@ Page({
       method: 'POST',
       data: { text },
     });
-    this.setData({ step: 1, progress: 70 });
+    this.setData({ step: 1, progress: 70, stepLabel: this.data.steps[1] || '正在整理重点' });
     const saved = await request({
       url: '/api/cards/save',
       method: 'POST',
@@ -118,7 +144,13 @@ Page({
         transcript: text,
       },
     });
-    this.setData({ progress: 100, step: 1, lastCard: saved.card, input: '' });
-    wx.showToast({ title: '已保存', icon: 'success' });
+    this.setData({
+      progress: 100,
+      step: 1,
+      stepLabel: '已保存',
+      lastCard: saved.card,
+      input: '',
+    });
+    wx.showToast({ title: '已保存到知识库', icon: 'success' });
   },
 });

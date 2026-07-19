@@ -1,0 +1,17 @@
+<t-tab-bar
+  value="{{value}}"
+  bind:change="onChange"
+  fixed="{{true}}"
+  safe-area-inset-bottom="{{true}}"
+  placeholder="{{true}}"
+  split="{{true}}"
+  theme="tag"
+  t-class="app-tab-bar"
+>
+  <t-tab-bar-item
+    wx:for="{{list}}"
+    wx:key="value"
+    value="{{item.value}}"
+    icon="{{item.icon}}"
+  >{{item.text}}</t-tab-bar-item>
+</t-tab-bar>

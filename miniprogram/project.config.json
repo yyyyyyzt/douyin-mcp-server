@@ -1,0 +1,19 @@
+{
+  "description": "自装助手小程序",
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": "node_modules" }
+    ]
+  },
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "packNpmManually": false
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.5.5",
+  "appid": "touristappid",
+  "projectname": "zizhuang-assistant"
+}

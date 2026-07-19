@@ -1,34 +1,72 @@
-<view class="page safe-bottom">
-  <view wx:if="{{!messages.length}}" class="quick">
-    <view class="hint">试试这些问题：</view>
-    <view
-      wx:for="{{quickQuestions}}"
-      wx:key="*this"
-      class="quick-item"
-      data-q="{{item}}"
-      bindtap="askQuick"
-    >{{item}}</view>
+<view class="page-root chat-page">
+  <view class="page-header">
+    <view>
+      <view class="page-title">问答</view>
+      <view class="page-subtitle">用对话查知识、看报价，后续还可记账与管预算</view>
+    </view>
+    <view class="settings-entry" bindtap="goSettings">
+      <t-icon name="setting" size="44rpx" color="#6b7280" />
+    </view>
   </view>
 
-  <scroll-view scroll-y class="chat" scroll-into-view="bottom">
-    <block wx:for="{{messages}}" wx:key="index">
-      <view class="msg {{item.role}}">
-        <text>{{item.content}}{{item.pending ? '…' : ''}}</text>
-        <view wx:if="{{item.role === 'assistant' && !item.pending && item.grounded}}" class="badge ok">来自你的知识库</view>
-        <view wx:if="{{item.role === 'assistant' && !item.pending && !item.grounded}}" class="badge warn">没找到你的知识依据，仅供参考</view>
+  <scroll-view
+    class="scroll-body chat-scroll"
+    scroll-y
+    enhanced
+    show-scrollbar="{{false}}"
+    scroll-into-view="{{scrollIntoView}}"
+    scroll-with-animation
+  >
+    <view wx:if="{{!messages.length}}" class="scenario-panel">
+      <view class="scenario-hint">试试这些对话场景：</view>
+      <view class="scenario-list">
+        <view
+          wx:for="{{scenarios}}"
+          wx:key="id"
+          class="scenario-item {{item.enabled ? '' : 'disabled'}}"
+          data-id="{{item.id}}"
+          bindtap="onScenarioTap"
+        >
+          <text>{{item.label}}</text>
+          <t-tag wx:if="{{item.badge}}" size="small" variant="outline">{{item.badge}}</t-tag>
+        </view>
       </view>
+    </view>
+
+    <block wx:for="{{messages}}" wx:key="id">
+      <chat-message message="{{item}}" />
     </block>
-    <view id="bottom"></view>
+    <view id="chat-bottom" class="scroll-anchor"></view>
   </scroll-view>
 
-  <view wx:if="{{document}}" class="doc">
-  已选：{{document.filename}}
-    <text bindtap="clearDoc">移除</text>
-  </view>
-
-  <view class="composer">
-    <button size="mini" bindtap="chooseFile">附件</button>
-    <input class="composer-input" value="{{input}}" bindinput="onInput" confirm-type="send" bindconfirm="send" />
-    <button class="send" loading="{{loading}}" bindtap="send">发送</button>
+  <view class="composer-bar">
+    <view wx:if="{{attachment}}" class="attachment-bar">
+      <t-tag theme="primary" variant="light">
+        {{attachment.filename}}
+      </t-tag>
+      <text class="clear-attach" bindtap="clearAttachment">移除</text>
+    </view>
+    <view class="composer-row">
+      <view class="attach-btn" bindtap="chooseFile">
+        <t-icon name="attach" size="44rpx" color="#6b7280" />
+      </view>
+      <input
+        class="composer-input"
+        value="{{input}}"
+        placeholder="输入你的装修问题"
+        confirm-type="send"
+        adjust-position="{{true}}"
+        cursor-spacing="24"
+        bindinput="onInput"
+        bind:tap="send"
+      />
+      <t-button
+        theme="primary"
+        size="small"
+        loading="{{loading}}"
+        disabled="{{loading}}"
+        bind:tap="send"
+      >发送</t-button>
+    </view>
   </view>
 </view>

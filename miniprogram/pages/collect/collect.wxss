@@ -1,21 +1,34 @@
-.page { padding: 32rpx; }
-.hero { margin-bottom: 24rpx; color: #6b7280; }
-.input {
-  width: 100%;
+.collect-textarea {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 16rpx;
   min-height: 200rpx;
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
 }
-.row { margin-bottom: 24rpx; }
-.progress { margin-top: 32rpx; color: #6b7280; }
-.error { color: #dc2626; margin-top: 24rpx; }
-.preview {
+
+.actions {
+  margin: 16rpx 0 24rpx;
+}
+
+.progress-block {
   margin-top: 32rpx;
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 24rpx;
 }
-.preview-title { font-weight: 600; display: block; margin-bottom: 12rpx; }
-.preview-body { color: #4b5563; }
+
+.progress-label {
+  display: block;
+  margin-bottom: 12rpx;
+  color: #6b7280;
+  font-size: 26rpx;
+}
+
+.error-text {
+  margin-top: 24rpx;
+  color: #dc2626;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.preview-cell {
+  margin-top: 32rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+}

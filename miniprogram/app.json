@@ -8,9 +8,11 @@
   "window": {
     "navigationBarTitleText": "自装助手",
     "navigationBarBackgroundColor": "#FFF8F5",
+    "navigationBarTextStyle": "black",
     "backgroundColor": "#FFF8F5"
   },
   "tabBar": {
+    "custom": true,
     "color": "#9CA3AF",
     "selectedColor": "#FF6B4A",
     "backgroundColor": "#FFFFFF",
@@ -30,6 +32,8 @@
       }
     ]
   },
+  "usingComponents": {},
   "style": "v2",
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
 }
