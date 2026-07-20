@@ -17,7 +17,9 @@
 | P3 | `t-popup` 知识库详情；`t-search`/`t-tag`/`t-empty`；收集/问答 TDesign 组件 | ✅ |
 | P4 | iOS / Android / 鸿蒙真机矩阵 | ⬜ 待手动验收 |
 
-本地构建：见 [`miniprogram/README.md`](../miniprogram/README.md)（`npm install` → 开发者工具「构建 npm」）。
+本地构建：见 [`miniprogram/README.md`](../miniprogram/README.md)。
+
+**npm 常见报错**：`tdesign-miniprogram/... 未找到组件` → 在 `miniprogram/` 目录执行 `npm install`（非仓库根目录），并确保存在 `miniprogram_npm/tdesign-miniprogram/`（可 `npm run build:npm` 或开发者工具「构建 npm」）。项目根目录须选 `miniprogram/`。
 
 ---
 

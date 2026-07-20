@@ -61,6 +61,5 @@ data/
 *.sqlite
 *.sqlite3
 
-# 微信小程序
+# 微信小程序（miniprogram_npm 已提交仓库，升级依赖后请 npm run build:npm）
 miniprogram/node_modules/
-miniprogram/miniprogram_npm/

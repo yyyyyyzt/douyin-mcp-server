@@ -10,7 +10,8 @@
     "es6": true,
     "postcss": true,
     "minified": true,
-    "packNpmManually": false
+    "packNpmManually": false,
+    "nodeModules": true
   },
   "compileType": "miniprogram",
   "libVersion": "3.5.5",
