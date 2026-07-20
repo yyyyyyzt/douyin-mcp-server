@@ -1,28 +1,14 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
-name = "douyin-mcp-server"
-version = "1.4.0"
-description = "MCP server for downloading Douyin videos and extracting text"
+name = "zizhuang-assistant"
+version = "0.1.0"
+description = "自装助手：把短视频里的装修知识沉淀为个人/共享知识库，并基于知识库对话问答（微信小程序 + FastAPI）"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "yzfly", email = "yz.liu.me@gmail.com"}
 ]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-]
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.0.0",
     "requests",
     "ffmpeg-python",
     "tqdm",
@@ -35,19 +21,15 @@ dependencies = [
     "python-multipart>=0.0.20",
 ]
 
-[project.urls]
-Homepage = "https://github.com/yzfly/douyin-mcp-server"
-Repository = "https://github.com/yzfly/douyin-mcp-server"
-Issues = "https://github.com/yzfly/douyin-mcp-server/issues"
-
-[project.scripts]
-douyin-mcp-server = "douyin_mcp_server.server:main"
-
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
 ]
+
+[tool.uv]
+# 应用型仓库，不构建/安装为 Python 包，uv sync 只装依赖
+package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
