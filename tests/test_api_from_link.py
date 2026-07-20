@@ -61,8 +61,12 @@ def env(tmp_path):
     extract_calls = []
     fake_extract = _make_fake_extract(calls=extract_calls)
 
+    def _fake_info(url):
+        return dict(FAKE_EXTRACT_RESULT["video_info"])
+
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: fake_extract
+    webapp.app.dependency_overrides[webapp.get_video_info_fn] = lambda: _fake_info
     override_current_user(user)
     original_resolve = webapp.resolve_llm_client
     webapp.resolve_llm_client = lambda llm_model="": fake_llm

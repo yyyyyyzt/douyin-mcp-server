@@ -39,6 +39,10 @@ def _fake_extract(url, api_key=None, show_progress=False, on_progress=None, use_
     return dict(FAKE_RESULT)
 
 
+def _fake_video_info(url):
+    return dict(FAKE_RESULT["video_info"])
+
+
 @pytest.fixture()
 def extract_env(tmp_path):
     db_path = str(tmp_path / "extract.db")
@@ -48,6 +52,7 @@ def extract_env(tmp_path):
 
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: _fake_extract
+    webapp.app.dependency_overrides[webapp.get_video_info_fn] = lambda: _fake_video_info
     override_current_user(user)
     original_resolve = webapp.resolve_llm_client
     webapp.resolve_llm_client = lambda llm_model="": FakeLLM()
