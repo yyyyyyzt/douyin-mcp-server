@@ -26,7 +26,7 @@ function wechatLogin() {
             url: '/api/auth/wechat/login',
             method: 'POST',
             data: { code: res.code },
-            auth: false,
+            needAuth: false,
           });
           if (data.token) {
             setToken(data.token);

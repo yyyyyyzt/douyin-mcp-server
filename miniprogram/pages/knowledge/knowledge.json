@@ -9,6 +9,7 @@
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-button": "tdesign-miniprogram/button/button",
     "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-loading": "tdesign-miniprogram/loading/loading"
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "login-guard": "/components/login-guard/index"
   }
 }

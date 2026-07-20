@@ -1,8 +1,10 @@
 <view class="page-root chat-page">
+  <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
+  <block wx:if="{{!needLogin}}">
   <view class="page-header">
     <view>
-      <view class="page-title">问答</view>
-      <view class="page-subtitle">用对话查知识、看报价，后续还可记账与管预算</view>
+      <view class="page-title">AI 助手</view>
+      <view class="page-subtitle">基于你的装修知识对话问答</view>
     </view>
     <view class="settings-entry" bindtap="goSettings">
       <t-icon name="setting" size="44rpx" color="#6b7280" />
@@ -69,4 +71,5 @@
       >发送</t-button>
     </view>
   </view>
+  </block>
 </view>

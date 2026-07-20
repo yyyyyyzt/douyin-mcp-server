@@ -1,4 +1,6 @@
 <view class="page-root">
+  <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
+  <block wx:if="{{!needLogin}}">
   <view class="page-header">
     <view>
       <view class="page-title">知识库</view>
@@ -48,7 +50,7 @@
       wx:for="{{filtered}}"
       wx:key="id"
       title="{{item.title || '未命名'}}"
-      description="{{item.raw_text}}"
+      description="{{item.excerpt}}"
       hover
       arrow
       data-id="{{item.id}}"
@@ -66,7 +68,7 @@
       <block wx:if="{{!editing}}">
         <view class="detail-title">{{detail.title}}</view>
         <scroll-view scroll-y class="detail-body" enhanced show-scrollbar="{{false}}">
-          <text>{{detail.raw_text}}</text>
+          <rich-text nodes="{{detailHtml}}" />
         </scroll-view>
         <view class="detail-actions">
           <t-button theme="light" size="medium" bind:tap="toggleEdit">编辑</t-button>
@@ -81,4 +83,5 @@
       </block>
     </view>
   </t-popup>
+  </block>
 </view>

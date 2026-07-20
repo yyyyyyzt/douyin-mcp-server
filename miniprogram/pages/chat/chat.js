@@ -1,5 +1,6 @@
 const { request, uploadFile } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
+const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
 const {
   SCENARIO_KINDS,
   ATTACHMENT_KINDS,
@@ -12,6 +13,7 @@ const {
 
 Page({
   data: {
+    needLogin: false,
     messages: [],
     input: '',
     loading: false,
@@ -23,6 +25,11 @@ Page({
 
   onShow() {
     syncTabBarForRoute(this);
+    refreshLoginState(this);
+  },
+
+  onLoginSuccess() {
+    onLoginSuccess(this);
   },
 
   goSettings() {

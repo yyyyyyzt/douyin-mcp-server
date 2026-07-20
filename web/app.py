@@ -149,14 +149,6 @@ def get_video_info_fn() -> Callable:
 EXTRACT_LIMIT_MSG = "今日链接提取次数已用完，明天再来吧"
 
 
-def _assert_extract_quota(conn, user: dict) -> None:
-    """超限时抛 429（缓存命中路径在任务内跳过此检查）。"""
-    limit = get_daily_extract_limit(user.get("level") or 0)
-    used = db.get_extract_calls(conn, user["id"])
-    if used >= limit:
-        raise HTTPException(status_code=429, detail=EXTRACT_LIMIT_MSG)
-
-
 def get_current_user(request: Request, conn=Depends(get_db)) -> dict:
     """校验 Bearer token 并返回当前用户。"""
     auth_header = request.headers.get("Authorization", "")

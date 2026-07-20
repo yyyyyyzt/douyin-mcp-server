@@ -13,7 +13,7 @@
 | 文档 | 内容 |
 |---|---|
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：信息架构 / 数据模型 / API 契约 / 限额与缓存 / 防幻觉 |
-| [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md) | v2 改版开发计划（任务分解 + 验收标准，**待确认**）|
+| [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md) | v2 改版开发计划（任务分解 + 验收标准，已确认实施）|
 | [`PROGRESS.md`](PROGRESS.md) | 进度追踪与开发规范，新 agent 上手入口 |
 | [`AGENTS.md`](AGENTS.md) | 云端 agent 环境说明（uv / 测试 / 运行方式）|
 | [`miniprogram/README.md`](miniprogram/README.md) | 小程序本地开发（开发者工具 / npm 构建）|
@@ -44,7 +44,7 @@ uv run python scripts/check_api_keys.py   # --only llm | asr
 ## 🖥️ 产品形态（小程序三 Tab）
 
 - **收集**（左）：粘贴抖音分享链接或文字，一键读取、整理并保存到知识库。
-- **AI 对话**（中，默认落地页）：基于知识库回答，展示引用；未登录时提供微信一键登录。
+- **AI 助手**（中，默认落地页）：基于知识库回答，展示引用；未登录时提供微信一键登录。
 - **知识库**（右）：搜索 / 筛选 / 查看 / 编辑 / 删除自己的知识（Markdown）。
 
 ## 🧩 API 速查
