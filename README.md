@@ -2,88 +2,66 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-把短视频里认可的装修知识，沉淀为**结构化卡片**；与装修公司沟通时，基于这些卡片回答问题，
-**严格防止模型幻觉**。粘贴一个抖音分享链接即可自动转写、AI 结构化入库——无需手动誊抄。
+刷到认可的装修知识 → 粘贴分享链接自动转写、整理，存进**自己的知识库** →
+和 AI 对话时，AI **严格基于这些知识**回答，绝不编造（防幻觉）。
 
-> 可自托管的 Web 应用（移动优先 + PWA）；下一阶段主推**微信原生小程序**，后端增加微信登录与按用户隔离知识库，WebUI 以兼容模式继续可用。
+主形态为**微信原生小程序**（`miniprogram/`，AI 对话为中心）；Web 端（`web/`）仅作
+开发调试与自托管兼容入口。
 
 ## 📚 文档导航
 
 | 文档 | 内容 |
 |---|---|
-| [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：架构 / 数据模型 / 接口契约 / 防幻觉策略 / 关键决策 |
-| [`docs/FRONTEND_REFACTOR_PLAN.md`](docs/FRONTEND_REFACTOR_PLAN.md) | 面向 AI 零基础手机用户的前端重构规划 |
-| [`docs/WECHAT_MINIPROGRAM_PLAN.md`](docs/WECHAT_MINIPROGRAM_PLAN.md) | 微信原生小程序 + 用户隔离改造计划（已确认可行）|
-| [`docs/MINIPROGRAM_UI_OPTIMIZATION.md`](docs/MINIPROGRAM_UI_OPTIMIZATION.md) | 小程序 UI 优化建议（Tab 固定、TDesign、布局）|
-| [`PROGRESS.md`](PROGRESS.md) | 开发进度、任务分解与验收标准、新 agent 上手指南 |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | 总体设计：信息架构 / 数据模型 / API 契约 / 限额与缓存 / 防幻觉 |
+| [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md) | v2 改版开发计划（任务分解 + 验收标准，**待确认**）|
+| [`PROGRESS.md`](PROGRESS.md) | 进度追踪与开发规范，新 agent 上手入口 |
 | [`AGENTS.md`](AGENTS.md) | 云端 agent 环境说明（uv / 测试 / 运行方式）|
-
-## 🚦 当前进度
-
-- ✅ 任务 1~9：知识库 / LLM / 录入 / 问答 / 防幻觉 / Web 三 Tab + PWA 手机极简 UI。
-- ✅ 任务 10~14：微信登录 + 按 `user_id` 隔离、Web `ALLOW_LOCAL_AUTH` 兼容、原生小程序脚手架、后端测试补齐。
-
-详见 [`PROGRESS.md`](PROGRESS.md)。
+| [`miniprogram/README.md`](miniprogram/README.md) | 小程序本地开发（开发者工具 / npm 构建）|
 
 ## ⚡ 快速开始
 
 ```bash
-# 1. 安装依赖（项目用 uv 管理，会自动建好 .venv 并装齐依赖）
+# 1. 安装依赖（uv 管理，自动建 .venv）
 uv sync
 
-# 2. 配置 LLM / 语音识别密钥（二者可共用一个硅基流动 Key）
+# 2. 配置密钥（LLM / 语音识别可共用一个硅基流动 Key）
 cp .env.example .env   # 编辑填入 API_KEY 等
-export API_KEY="sk-xxx"          # 语音识别（ASR），也作 LLM_API_KEY 的回退
-# 可选：替换 LLM 供应商 / 模型
-# export LLM_BASE_URL="https://api.siliconflow.cn/v1"
-# export LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
 
-# 3. 启动 WebUI（移动端可“添加到主屏幕”作为 PWA 使用）
-uv run python web/app.py        # 访问 http://localhost:8080
+# 3. 启动后端（Web 调试界面同端口）
+uv run python web/app.py        # http://localhost:8080
 
 # 4. 运行测试（TDD，应全绿）
 uv run python -m pytest
 
-# 5. 自测平台 Key 连通性（可选）
+# 5. 可选：自测平台 Key 连通性
 uv run python scripts/check_api_keys.py   # --only llm | asr
 ```
 
-> 💡 获取免费 API Key：[硅基流动](https://cloud.siliconflow.cn/i/TxUlXG3u)（新用户有免费额度）。
-> 主要环境变量见 [`docs/DESIGN.md` 第 9 节](docs/DESIGN.md)。
-> 小程序相关变量（任务 11 起）：`WECHAT_APPID` / `WECHAT_SECRET` / `SESSION_SECRET` / `ALLOW_LOCAL_AUTH`。
+> 💡 免费 API Key：[硅基流动](https://cloud.siliconflow.cn/i/TxUlXG3u)。
+> 环境变量清单见 [`docs/DESIGN.md` 第 7 节](docs/DESIGN.md)。
+> 小程序调试：微信开发者工具打开 `miniprogram/`，见 [`miniprogram/README.md`](miniprogram/README.md)。
 
-### 🖥️ 三个 Tab
+## 🖥️ 产品形态（小程序三 Tab）
 
-- **收集**：粘贴抖音分享链接或文字 → 一键读取、整理并保存到知识库。
-- **知识库**：搜索 / 阶段筛选；卡片详情可编辑、删除。
-- **问答**：基于知识库检索作答并展示引用；无相关知识时提示「没有找到你的知识依据」（防幻觉）。
+- **收集**（左）：粘贴抖音分享链接或文字，一键读取、整理并保存到知识库。
+- **AI 对话**（中，默认落地页）：基于知识库回答，展示引用；未登录时提供微信一键登录。
+- **知识库**（右）：搜索 / 筛选 / 查看 / 编辑 / 删除自己的知识（Markdown）。
 
-### 🧩 知识库 API 速查
+## 🧩 API 速查
+
+业务接口需 `Authorization: Bearer <token>`
+（`POST /api/auth/wechat/login` 小程序登录；`POST /api/auth/local` 仅 `ALLOW_LOCAL_AUTH=1`）。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/api/cards/from-text` | 粘贴文案 → AI 结构化 → 入库（支持多卡）|
-| `POST` | `/api/cards/from-link` | 抖音链接 → 转写 → 结构化 → 入库（**异步**，返回 `task_id`）|
-| `GET` | `/api/cards/task/{task_id}` | 查询链接录入进度（`extracting/structuring/done/duplicate/failed`）|
-| `GET` | `/api/cards?stage=` | 卡片列表（可按阶段筛选）|
-| `GET` | `/api/cards/{id}` | 卡片详情 |
-| `PUT` | `/api/cards/{id}` | 编辑卡片文本（不重新调 AI，同步 `structured_json`）|
-| `DELETE` | `/api/cards/{id}` | 删除卡片 |
-| `POST` | `/api/chat` | 知识库问答 → 返回 `answer` + `grounded` + `citations`（防幻觉）|
+| `POST` | `/api/cards/from-text` | 粘贴文字 → AI 整理 → 入库 |
+| `POST` | `/api/cards/from-link` | 抖音链接 → 转写 → 整理 → 入库（异步，返回 `task_id`）|
+| `GET` | `/api/cards/task/{task_id}` | 查询链接录入进度 |
+| `GET/PUT/DELETE` | `/api/cards*` | 列表（`?stage=`）/ 详情 / 编辑 / 删除 |
+| `POST` | `/api/documents/parse` | 上传报价单/合同解析 |
+| `POST` | `/api/chat` | 对话 → `answer + grounded + citations`（防幻觉）|
 
-> 任务 11 起，上述业务接口需 `Authorization: Bearer <token>`，并按登录用户隔离数据。
-> 鉴权：`POST /api/auth/wechat/login`（小程序）；`POST /api/auth/local`（仅 `ALLOW_LOCAL_AUTH=1` 的 Web 兼容）。
-
-```bash
-# 链接一键入库（异步：先拿 task_id，再轮询进度）
-curl -X POST localhost:8080/api/cards/from-link -H 'Content-Type: application/json' \
-  -d '{"url":"<抖音分享链接或整段分享文案>"}'
-curl localhost:8080/api/cards/task/<task_id>
-
-# 基于知识库问答（无相关知识时 grounded=false 并给出声明，不编造）
-curl -X POST localhost:8080/api/chat -H 'Content-Type: application/json' \
-  -d '{"question":"卫生间防水要刷多高？"}'
-```
+完整契约见 [`docs/DESIGN.md` 第 5 节](docs/DESIGN.md)。
 
 ## 📋 系统要求
 
@@ -91,9 +69,9 @@ curl -X POST localhost:8080/api/chat -H 'Content-Type: application/json' \
 |------|------|----------|
 | uv | Python 包管理 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Python | 3.10+ | `uv python install 3.12` |
-| FFmpeg | 音视频处理（链接转写需要）| `brew install ffmpeg`（macOS）/ `apt install ffmpeg`（Ubuntu）|
+| FFmpeg | 音视频处理（链接转写需要）| `brew install ffmpeg` / `apt install ffmpeg` |
 
-小程序上线另需：公网 HTTPS + 备案域名、微信公众平台 request/uploadFile 合法域名（见改造计划部署清单）。
+小程序上线另需：公网 HTTPS + 备案域名、微信公众平台 request/uploadFile 合法域名。
 
 ## ⚠️ 免责声明
 

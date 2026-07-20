@@ -4,7 +4,7 @@
 
 **微信开发者工具的项目根目录必须是本文件夹 `miniprogram/`**（里面有 `app.json`、`project.config.json`）。
 
-不要选仓库根目录 `douyin-mcp-server/`。
+不要选仓库根目录。
 
 ## 2. npm 安装位置
 
@@ -49,4 +49,4 @@ npm run build:npm
 
 - [TDesign 小程序](https://tdesign.tencent.com/miniprogram/getting-started) + 自定义 `custom-tab-bar`
 - 对话场景：`utils/chat-scenarios.js`
-- 优化规划：[`../docs/MINIPROGRAM_UI_OPTIMIZATION.md`](../docs/MINIPROGRAM_UI_OPTIMIZATION.md)
+- 设计与 UI 约定：[`../docs/DESIGN.md`](../docs/DESIGN.md)；改版计划：[`../docs/DEV_PLAN.md`](../docs/DEV_PLAN.md)
