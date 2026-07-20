@@ -61,8 +61,12 @@ def env(tmp_path):
     extract_calls = []
     fake_extract = _make_fake_extract(calls=extract_calls)
 
+    def _fake_info(url):
+        return dict(FAKE_EXTRACT_RESULT["video_info"])
+
     webapp.app.dependency_overrides[webapp.get_db_path] = lambda: db_path
     webapp.app.dependency_overrides[webapp.get_extractor] = lambda: fake_extract
+    webapp.app.dependency_overrides[webapp.get_video_info_fn] = lambda: _fake_info
     override_current_user(user)
     original_resolve = webapp.resolve_llm_client
     webapp.resolve_llm_client = lambda llm_model="": fake_llm
@@ -119,8 +123,7 @@ def test_from_link_dedup_blocks_reimport(env):
         conn,
         user["id"],
         title="已存在的瓦工卡片",
-        raw_text="旧文案",
-        structured_json=json.dumps({"title": "已存在的瓦工卡片", "content": "旧文案"}, ensure_ascii=False),
+        content_md="旧文案",
         source_type="douyin_link",
         source_url="https://v.douyin.com/old/",
         video_id="vid_abc123",
@@ -201,5 +204,5 @@ def test_from_link_multi_cards_merged_to_one(env):
     assert task["status"] == "done"
     assert len(task["cards"]) == 1
     assert task["cards"][0]["video_id"] == "vid_abc123"
-    assert "细节 A" in task["cards"][0]["raw_text"]
+    assert "细节 A" in task["cards"][0]["content_md"]
     assert len(db.list_cards(conn, user["id"])) == 1

@@ -86,7 +86,7 @@ def test_save_card_persists_without_llm(client):
     assert resp.status_code == 200
     card = resp.json()["card"]
     assert card["title"] == "标题"
-    assert card["raw_text"] == "正文内容"
+    assert card["content_md"] == "正文内容"
     assert db.get_card(conn, card["id"], user["id"]) is not None
 
 

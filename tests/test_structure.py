@@ -1,4 +1,4 @@
-"""structure 层测试（TDD）：文案 -> 单条结构化卡片。"""
+"""structure 层测试：文案 -> 单条 Markdown 知识卡片。"""
 
 import json
 
@@ -24,29 +24,34 @@ def _card_payload(cards):
 def test_structure_single_card():
     llm = FakeLLM([
         _card_payload([
-            {"title": "冷热水管走顶规范", "content": "冷热水管建议走顶，弹线定位误差应控制在 2mm 以内。"}
+            {
+                "title": "冷热水管走顶规范",
+                "content_md": "冷热水管建议走顶，弹线定位误差应控制在 2mm 以内。",
+            }
         ])
     ])
     card = structure.structure_text_single("一段水电改造文案……", llm)
     assert card["title"] == "冷热水管走顶规范"
-    assert "走顶" in card["raw_text"]
+    assert "走顶" in card["content_md"]
+    assert "structured_json" not in card
+    assert "raw_text" not in card
 
 
 def test_structure_merges_multiple_cards_into_one():
     llm = FakeLLM([
         _card_payload([
-            {"title": "卡片1", "content": "内容一"},
-            {"title": "卡片2", "content": "内容二"},
+            {"title": "卡片1", "content_md": "内容一"},
+            {"title": "卡片2", "content_md": "内容二"},
         ])
     ])
     cards = structure.structure_text("很长的多主题文案……", llm)
     assert len(cards) == 1
-    assert "内容一" in cards[0]["raw_text"]
-    assert "内容二" in cards[0]["raw_text"]
+    assert "内容一" in cards[0]["content_md"]
+    assert "内容二" in cards[0]["content_md"]
 
 
 def test_structure_strips_code_fences():
-    raw = "```json\n" + _card_payload([{"title": "T", "content": "正文"}]) + "\n```"
+    raw = "```json\n" + _card_payload([{"title": "T", "content_md": "正文"}]) + "\n```"
     llm = FakeLLM([raw])
     card = structure.structure_text_single("文案", llm)
     assert card["title"] == "T"
@@ -56,19 +61,17 @@ def test_structure_falls_back_to_full_text_when_no_content():
     full = "完整原始文案内容"
     llm = FakeLLM([_card_payload([{"title": "T"}])])
     card = structure.structure_text_single(full, llm)
-    assert card["raw_text"] == full
+    assert card["content_md"] == full
 
 
-def test_structure_builds_structured_json():
+def test_structure_accepts_legacy_content_field():
     llm = FakeLLM([_card_payload([{"title": "T", "content": "正文"}])])
     card = structure.structure_text_single("文案", llm)
-    parsed = json.loads(card["structured_json"])
-    assert parsed["title"] == "T"
-    assert parsed["content"] == "正文"
+    assert card["content_md"] == "正文"
 
 
 def test_structure_retries_on_invalid_json():
-    llm = FakeLLM(["这不是JSON", _card_payload([{"title": "重试成功", "content": "正文"}])])
+    llm = FakeLLM(["这不是JSON", _card_payload([{"title": "重试成功", "content_md": "正文"}])])
     card = structure.structure_text_single("文案", llm, max_retries=2)
     assert card["title"] == "重试成功"
     assert len(llm.calls) == 2
@@ -80,7 +83,7 @@ def test_structure_raises_after_retries():
         structure.structure_text_single("文案", llm, max_retries=2)
 
 
-def test_structure_rich_fields_in_raw_text():
+def test_structure_rich_fields_into_markdown():
     llm = FakeLLM([
         _card_payload([
             {
@@ -97,13 +100,10 @@ def test_structure_rich_fields_in_raw_text():
     ])
     card = structure.structure_text_single("防水要刷到1.8米……", llm)
     assert card["stage"] == "防水"
-    assert "1.8 米" in card["raw_text"]
-    assert "闭水试验" in card["raw_text"]
-    assert "挡水坝" in card["raw_text"]
-    parsed = json.loads(card["structured_json"])
-    assert parsed["stage"] == "防水"
-    assert len(parsed["standards"]) == 1
-    assert len(parsed["tags"]) == 2
+    assert "1.8 米" in card["content_md"]
+    assert "闭水试验" in card["content_md"]
+    assert "挡水坝" in card["content_md"]
+    assert "基层处理" in card["content_md"]
 
 
 def test_structure_empty_text_raises():

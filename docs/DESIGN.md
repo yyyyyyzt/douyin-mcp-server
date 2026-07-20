@@ -1,307 +1,262 @@
 # 自装助手 · 总体设计文档
 
-> 本文件是项目的"单一事实来源（Single Source of Truth）"，描述目标、架构、数据模型、
-> 接口契约、防幻觉策略与关键技术决策。任何后续开发（包括新启动的 agent）都应先读本文件，
-> 再读 [`../PROGRESS.md`](../PROGRESS.md) 了解当前进度与下一步；前端重构还必须阅读
-> [`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)；微信小程序与多用户改造还必须阅读
-> [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
+> 本文件是项目的**单一事实来源（Single Source of Truth）**：产品定位、信息架构、
+> 架构与数据模型、接口契约、资源节约与限额策略、防幻觉策略。
+> 开发前先读本文件，再读 [`DEV_PLAN.md`](DEV_PLAN.md)（任务分解与验收标准）与
+> [`../PROGRESS.md`](../PROGRESS.md)（当前进度）。
+>
+> 文中明确区分「✅ 现状（已实现）」与「🎯 目标（待实施，对应 DEV_PLAN 任务）」。
 
 ---
 
-## 1. 项目起点（第一性原理）
+## 1. 产品定位
 
-- **用户**：MVP 以作者自用 Web 为起点；下一阶段面向完全不懂 AI 的手机端自装用户，
-  通过**微信原生小程序 + 微信登录**推广，知识库按 `openid` / `user_id` 隔离。
-- **目标**：把在短视频平台上认可的装修知识，沉淀为结构化卡片；与装修公司沟通时，
-  基于这些卡片回答问题，**严格防止模型幻觉**。
-- **范围**：只做最核心的「存知识」和「问知识」两条链路。分享、协作、版本化、反馈闭环暂不做。
-- **形态**：保留可自托管的 Web 应用（移动优先 + PWA，兼容本地登录）；**主推广形态为微信原生小程序**，
-  后端保持干净、前后端解耦的 JSON API，密钥 / ASR / LLM 全部在服务端。
+- **一句话**：刷到认可的装修知识 → 存进自己的知识库 → 和 AI 对话时，AI 严格基于这些知识回答。
+- **目标用户**：正在装修、主要用手机、完全不懂 AI 概念的普通用户。
+- **主形态**：**微信原生小程序**（`miniprogram/`）。Web（`web/templates/index.html`）仅作
+  开发调试与自托管兼容入口，不再新增功能。
+- **核心理念**：
+  1. **AI 对话是产品的中心**：进入小程序即是对话页（Tab 文案「AI 助手」）；收集与管理知识都是为对话服务的。
+  2. **收藏即拥有**：粘贴抖音分享链接即可自动转写、整理、入库，无需手动誊抄。
+  3. **知识默认私有**：`is_public` 默认 0；公开后如何分享 → 下一步规划。
+  4. **防幻觉**：回答必须声明是否基于用户知识库，绝不编造。
+  5. **Web 冻结**：仅不方便使用小程序时调试，不再新增功能。
 
-### 与原始仓库的关系
+## 2. 信息架构（🎯 目标，对应 DEV_PLAN 任务 M2）
 
-本项目构建在 `douyin-mcp-server`（短视频无水印下载 + 语音转文案）之上。原仓库的
-抖音解析/下载/转写能力，正好补上了"知识录入"最难的一环：**用户无需手动誊抄文案，
-粘贴一个分享链接即可自动得到文案**。这是本产品"真正易用"的关键。
+小程序底部 3 个 Tab，**对话居中且为默认落地页**：
 
----
+```
+┌─────────────────────────────────────┐
+│              页面内容                │
+├───────────┬───────────┬─────────────┤
+│   收集     │  AI 对话   │   知识库    │
+│  (左)      │ (中,默认)  │   (右)      │
+└───────────┴───────────┴─────────────┘
+```
 
-## 2. 技术栈
+| Tab | 位置 | 职责 | 主动作 |
+|---|---|---|---|
+| 收集 | 左 | 把刷到的装修经验存起来 | 粘贴链接/文字 → 保存到知识库 |
+| **AI 助手** | **中（默认落地页）** | 基于知识库对话问答 | 提问、上传报价单、查看依据 |
+| 知识库 | 右 | 管理已保存的知识 | 搜索、筛选、查看、编辑、删除 |
 
-| 层 | 选择 | 原因 |
-|---|------|------|
-| 后端 | Python + FastAPI | 复用现有 WebUI 工程，AI 生态成熟 |
-| 数据库 | SQLite + FTS5(trigram) | 零配置、单文件；trigram 分词器支持中文子串检索；按 `user_id` 隔离 |
-| 前端（Web） | 原生 HTML + Tailwind(CDN) + Alpine.js | 零构建；`ALLOW_LOCAL_AUTH` 兼容模式继续可用 |
-| 前端（小程序） | 微信原生（WXML/WXSS/JS） | 主推广形态；不引入 uni-app/Taro |
-| 鉴权 | 微信 `code2session` + HMAC Bearer token | 小程序登录；Web 本地登录共用同一套 token |
-| LLM | OpenAI 兼容接口（默认硅基流动） | **供应商可替换**，结构化与问答统一一套客户端 |
-| 语音识别 | 硅基流动 SenseVoice / 阿里云百炼 | 复用原仓库能力 |
-| 向量检索 | 暂不做 | 初期知识量少，关键词 + FTS5 足够；保留后续扩展空间 |
-| 部署 | 本地 / 单机 Docker；小程序需公网 HTTPS | Web 自用可本地；小程序需备案域名 + 微信合法域名 |
+- **未登录用户**：打开小程序先尝试 `wx.login` 静默登录；失败或登录态失效时，
+  对话页显示登录引导卡片（「微信一键登录」按钮），点击后完成登录再进入正常流程。
+  收集/知识库 Tab 同样受登录门槛保护。
+- 设置入口保留在页面右上角（非 Tab），只读展示服务状态与模型选择。
+- ✅ 现状：Tab 顺序为 收集|知识库|问答，默认落地收集页，登录失败仅 toast 提示——**需要改**。
 
----
+### 对话可扩展架构（✅ 已有骨架，保留）
 
-## 3. 整体架构
+后期「报价单审查 / 装修进度 / 记账 / 预算」等能力统一在对话 Tab 以消息类型扩展
+（`miniprogram/utils/chat-scenarios.js` + `components/chat-message` 按 `kind` 分支渲染），
+不新开 Tab。当前已接通 `knowledge_qa`（知识问答）与 `quote_review`（报价单审查）。
+
+### 小程序 UI 约定（✅ 已实施，沿用）
+
+- 组件库 [TDesign 小程序](https://tdesign.tencent.com/miniprogram/getting-started) +
+  `custom-tab-bar`（`t-tab-bar` fixed/placeholder/safe-area）。
+- 页面骨架：`.page-root { display:flex; flex-direction:column; height:100% }`（禁用 `100vh`），
+  滚动区 `flex:1; height:0`。
+- 设计令牌：主色 `#FF6B4A`、背景 `#FFF8F5`、成功 `#059669`、警告 `#D97706`；
+  点击区域 ≥ 88rpx。
+- 文案禁止出现 LLM / ASR / Prompt / API Key 等技术词；可信度用「来自你的知识库 /
+  没找到你的知识依据」表达。
+- 本地构建见 [`../miniprogram/README.md`](../miniprogram/README.md)。
+
+## 3. 技术栈与架构
+
+| 层 | 选择 | 说明 |
+|---|---|---|
+| 后端 | Python + FastAPI（`web/app.py`） | JSON API，前后端解耦 |
+| 数据库 | SQLite + FTS5(trigram) | 零配置单文件；无并发要求，单机即可 |
+| 前端（主） | 微信原生小程序 + TDesign | `miniprogram/` |
+| 前端（辅） | 单文件 HTML + Tailwind CDN + Alpine.js | `web/templates/index.html`，仅调试用 |
+| 鉴权 | 微信 `code2session` + HMAC Bearer token | Web 用 `ALLOW_LOCAL_AUTH=1` 本地登录兼容 |
+| LLM / ASR | OpenAI 兼容接口（默认硅基流动） | 供应商可替换；密钥只在服务端 `.env` |
+| 视频处理 | `douyin-video/scripts/douyin_downloader.py` + ffmpeg | 解析/下载/转写 |
 
 ```
 ┌──────────────────────────────┐  ┌──────────────────────────────┐
-│ WebUI（index.html，兼容模式）  │  │ 微信原生小程序 miniprogram/    │
-│ 收集 | 知识库 | 问答           │  │ 收集 | 知识库 | 问答           │
+│ 微信原生小程序（主形态）        │  │ WebUI（调试/自托管兼容）        │
+│ 收集 | AI对话(默认) | 知识库    │  │ 收集 | 知识库 | 问答           │
 └──────────────┬───────────────┘  └──────────────┬───────────────┘
                │ Bearer Token JSON API            │
 ┌──────────────▼──────────────────────────────────▼──────────────┐
 │  FastAPI（web/app.py）                                           │
-│   /api/auth/*       微信登录 / 本地登录（兼容 Web）               │
-│   /api/video/*      抖音解析/转写/下载（按 user 作用域）           │
-│   /api/cards/*      知识卡片 CRUD（按 user_id 隔离）              │
-│   /api/chat         基于个人知识库的问答                           │
-│   依赖注入：get_db / get_current_user / get_llm_client            │
-└───┬───────────────┬───────────────┬──────────────┬─────────────┘
-    │               │               │              │
-┌───▼────┐   ┌──────▼─────┐   ┌─────▼──────┐  ┌────▼─────────────┐
-│core/db │   │core/llm    │   │core/auth   │  │douyin_downloader │
-│SQLite  │   │OpenAI兼容  │   │wechat +    │  │解析/下载/转写     │
-│+FTS5   │   │可替换供应商│   │session     │  │（原仓库脚本）     │
-└────────┘   └────────────┘   └────────────┘  └──────────────────┘
-    │
-┌───▼──────────────────────────────────┐
-│ data/knowledge.db （已 gitignore）     │
-│ users + knowledge_cards(user_id)      │
-└───────────────────────────────────────┘
+│   /api/auth/*    微信登录 / 本地登录                              │
+│   /api/video/*   抖音解析/转写（视频+转写缓存）                     │
+│   /api/cards/*   知识 CRUD（markdown，按 user_id）                │
+│   /api/chat      基于知识库的对话（每日限额）                       │
+└───┬──────────────┬──────────────┬──────────────┬───────────────┘
+┌───▼────┐  ┌──────▼─────┐  ┌─────▼──────┐  ┌────▼─────────────┐
+│core/db │  │core/llm    │  │core/auth   │  │douyin_downloader │
+│SQLite  │  │OpenAI兼容  │  │wechat+HMAC │  │解析/下载/转写+缓存│
+└────────┘  └────────────┘  └────────────┘  └──────────────────┘
 ```
 
 ### 目录结构
 
 ```
-douyin-mcp-server/
 ├── web/
-│   ├── app.py                  # FastAPI 应用（鉴权 + 抖音提取 + 知识库 + 问答）
-│   ├── core/                   # 自装助手核心
-│   │   ├── db.py               # SQLite + FTS5 存储与检索（按 user_id）
-│   │   ├── auth.py / wechat.py # 会话签发、微信 code2session（待实施）
-│   │   ├── llm.py              # OpenAI 兼容、可替换供应商的 LLM 客户端
-│   │   └── structure.py        # 文案 -> 结构化知识卡片
-│   └── templates/index.html    # Web 单页前端（兼容本地登录）
-├── miniprogram/                # 微信原生小程序（待实施）
-├── douyin-video/scripts/douyin_downloader.py   # 解析/下载/转写（复用）
-├── douyin_mcp_server/          # MCP server（原仓库）
-├── tests/                      # pytest 测试（TDD）
-├── data/                       # SQLite 文件（gitignore）
+│   ├── app.py                  # FastAPI 应用（鉴权 + 视频提取 + 知识库 + 对话）
+│   ├── core/                   # db / llm / auth / wechat / structure / retrieve / qa / documents / prompts / settings
+│   ├── templates/index.html    # Web 调试前端
+│   └── static/                 # PWA manifest / 图标
+├── miniprogram/                # 微信原生小程序（主形态）
+├── douyin-video/scripts/douyin_downloader.py   # 抖音解析/下载/转写（含视频缓存）
+├── scripts/check_api_keys.py   # LLM/ASR Key 连通性自测
+├── tests/                      # pytest（TDD，全部离线）
+├── data/                       # SQLite / 缓存（gitignore）
 ├── docs/DESIGN.md              # 本文件
-├── docs/WECHAT_MINIPROGRAM_PLAN.md  # 小程序 + 用户隔离计划
-├── PROGRESS.md                 # 进度与任务分解
-└── AGENTS.md                   # 云端 agent 环境说明
+├── docs/DEV_PLAN.md            # 开发计划（任务分解 + 验收标准）
+└── PROGRESS.md                 # 进度追踪
 ```
 
----
+## 4. 数据模型（🎯 目标，对应 DEV_PLAN 任务 M1）
 
-## 4. 数据模型
-
-`users` 表 + 主表 `knowledge_cards`（含 `user_id`）+ 外部内容 FTS5 虚拟表 `knowledge_fts`
-（trigram 分词），通过触发器保持同步。所有卡片 CRUD / 检索强制带 `user_id`。
-
-> 现状：MVP 仍为全局 `video_id UNIQUE`、无 `user_id`。任务 10 起按下列目标 schema
-> 幂等迁移；已有数据归属默认用户 `openid=local-web`。详见
-> [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
+原则：**尽量精简**。知识正文统一为 **Markdown**，不再维护 `structured_json`/steps
+结构化字段；无并发要求，SQLite 单文件即可。项目尚未投入运行，**直接改 schema，
+不写兼容迁移代码**（现有 `db.py` 中 legacy 迁移逻辑一并删除）。
 
 ```sql
+-- 用户：微信 openid + 等级（限额用）
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    openid TEXT NOT NULL UNIQUE,   -- 微信 openid；Web 兼容用户为 'local-web'
-    unionid TEXT,                  -- 可空
+    openid TEXT NOT NULL UNIQUE,      -- Web 调试用户为 'local-web'
+    unionid TEXT,
+    level INTEGER NOT NULL DEFAULT 0, -- 用户等级：0 普通；后期不同等级不同每日限额
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP
 );
 
+-- 知识：markdown 正文 + 少量元数据
 CREATE TABLE knowledge_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
-    stage TEXT,                 -- 阶段：水电/泥木/油漆/防水/拆改/验收...
-    title TEXT,
-    raw_text TEXT NOT NULL,     -- 原始文案（转写或粘贴）
-    structured_json TEXT,       -- AI 结构化结果（stage/title/steps）
-    source_type TEXT DEFAULT 'manual',  -- 'manual' | 'douyin_link'
-    source_url TEXT,            -- 抖音分享链接（来源追溯）
-    video_id TEXT,              -- 抖音视频 ID；与 user_id 组合去重
+    title TEXT NOT NULL,
+    content_md TEXT NOT NULL,         -- Markdown 正文（唯一正文字段）
+    stage TEXT,                       -- 装修阶段标签：水电/防水/泥木/油漆/验收/其他
+    source_type TEXT DEFAULT 'manual',-- 'manual' | 'douyin_link'
+    source_url TEXT,
+    video_id TEXT,
+    is_public INTEGER NOT NULL DEFAULT 0,  -- 默认私有；公开分享 UX 下一步规划
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, video_id)   -- 同一用户不重复入库；不同用户可存同一视频
+    UNIQUE(user_id, video_id)         -- 同一用户不重复入库同一视频
 );
 
+-- FTS5 全文检索（title + content_md，trigram 中文子串）
 CREATE VIRTUAL TABLE knowledge_fts USING fts5(
-    title, raw_text,
+    title, content_md,
     content='knowledge_cards', content_rowid='id',
     tokenize='trigram'
 );
--- + AFTER INSERT/UPDATE/DELETE 触发器保持 FTS 同步
--- 检索时 JOIN knowledge_cards 并 WHERE user_id = ?
+-- + AFTER INSERT/UPDATE/DELETE 触发器保持同步
+
+-- 链接提取每日用量（只限提取，不限对话）：一天一行
+CREATE TABLE llm_usage (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    day TEXT NOT NULL,                -- 'YYYY-MM-DD'
+    extract_calls INTEGER NOT NULL DEFAULT 0,  -- 链接提取（转写+整理）次数
+    PRIMARY KEY (user_id, day)
+);
+
+-- 转写共享缓存：同一视频跨用户复用 ASR 结果，节约资源
+CREATE TABLE transcripts (
+    video_id TEXT NOT NULL,
+    asr_model TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (video_id, asr_model)
+);
 ```
 
-### 结构化卡片 JSON schema
+- ✅ 现状：`users`（无 `level`）、`knowledge_cards`（`raw_text` + `structured_json`）
+  已按 `user_id` 隔离；`llm_usage`、`transcripts` 不存在 → 🎯 M1/M2 直接改 schema。
+- **检索范围（本期）**：仅自己的知识。`is_public` 字段预留，跨用户共享检索延期。
 
-```json
-{
-  "stage": "水电改造",
-  "title": "冷热水管走顶规范",
-  "steps": [
-    {"order": 1, "action": "弹线定位", "detail": "用激光水平仪", "standard": "误差≤2mm", "warning": "避开承重墙和电线管"}
-  ]
+### 资源节约策略
+
+| 资源 | 策略 | 状态 |
+|---|---|---|
+| 视频下载 | 按 `video_id` 落盘缓存（`VIDEO_CACHE_DIR`，全局共享），命中则跳过下载 | ✅ 已实现 |
+| 语音转写 | `transcripts` 表按 `(video_id, asr_model)` 缓存，跨用户复用，命中则跳过 ASR | 🎯 M2 |
+| 链接提取限额 | `llm_usage.extract_calls` + 按 `users.level` 查限额；**对话不限额** | 🎯 M2 |
+| 重复收藏 | 同一用户同一 `video_id` 不重复入库 | ✅ 已实现 |
+
+限额默认值（可通过 `DAILY_EXTRACT_LIMIT` 覆盖，不做计费）：
+
+```python
+DAILY_EXTRACT_LIMITS = {   # level -> 每日链接提取次数
+    0: 10,   # 普通用户
+    1: 50,   # 后期高级用户
 }
 ```
-
-> 原文（或对应片段）存于 `raw_text` 列；`structured_json` 只存结构化部分，不重复存原文。
-
----
 
 ## 5. API 契约
 
-> 所有接口返回 JSON；前后端解耦。小程序与 Web 共用同一套契约；
-> 卡片 / 问答 / 转写 / 任务接口在任务 11 起需 `Authorization: Bearer <token>`，
-> 并按当前用户 `user_id` 隔离（响应 JSON 形状尽量不变）。
+所有接口返回 JSON；业务接口需 `Authorization: Bearer <token>`，按 `user_id` 作用域。
 
-### 鉴权（待实施，任务 11~12）
+### 鉴权（✅ 已实现）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/auth/wechat/login` | 小程序 `wx.login` 的 `code` → `code2session` → 签发 Bearer token |
-| POST | `/api/auth/local` | Web 兼容登录（仅 `ALLOW_LOCAL_AUTH=1`）；签发同一套 token |
+| POST | `/api/auth/wechat/login` | 小程序 `wx.login` code → `code2session` → 签发 token |
+| POST | `/api/auth/local` | Web 调试登录（仅 `ALLOW_LOCAL_AUTH=1`）|
 
-请求头：`Authorization: Bearer <token>`。任务内存字典写入 `user_id`，轮询校验归属，防越权。
-
-### 已实现（业务 API；鉴权挂载见进度任务 11）
+### 业务（✅ 已实现；🎯 M1 中卡片形状改为 markdown）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/health` | 健康检查 + ASR Key 配置状态（可匿名）|
-| POST | `/api/video/info` | 抖音链接 → 视频信息/下载链接（无需 Key）|
-| POST | `/api/video/extract` | 抖音链接 → 转写文案（需 ASR Key；异步）|
-| GET | `/api/video/extract/task/{task_id}` | 转写任务进度 |
+| GET | `/api/health` / `/api/config` | 健康检查 / 模型目录（可匿名）|
+| POST | `/api/video/info` | 抖音链接 → 视频信息/无水印下载链接 |
+| POST | `/api/video/extract` (+`/task/{id}`) | 链接 → 转写文案（异步 + 进度；命中缓存则秒回）|
 | GET | `/api/video/download` | 代理下载无水印视频 |
-| POST | `/api/cards/structure` | 文案 → AI 结构化（不入库）|
-| POST | `/api/cards/save` | 结构化结果入库 |
-| POST | `/api/cards/from-text` | 粘贴文案 → AI 结构化 → 入库（支持多卡）|
-| POST | `/api/cards/from-link` | 抖音链接 → 转写 → 结构化 → 入库（异步，返回 `task_id`）|
-| GET | `/api/cards/task/{task_id}` | 查询链接录入任务进度/结果 |
-| GET | `/api/cards?stage=` | 卡片列表（可按阶段筛选；按用户隔离）|
-| GET | `/api/cards/{id}` | 卡片详情（含解析后的 steps；按用户隔离）|
-| PUT | `/api/cards/{id}` | 编辑卡片（只改文本，不重新调 AI，同步 structured_json）|
-| DELETE | `/api/cards/{id}` | 删除卡片 |
+| POST | `/api/cards/structure` / `/api/cards/save` | 文案 → AI 整理（markdown）/ 入库 |
+| POST | `/api/cards/from-text` | 粘贴文字 → AI 整理 → 入库 |
+| POST | `/api/cards/from-link` (+`/task/{id}`) | 链接 → 转写 → 整理 → 入库（异步）|
+| GET/PUT/DELETE | `/api/cards*` | 列表（`?stage=`）/ 详情 / 编辑 / 删除 |
 | POST | `/api/documents/parse` | 上传报价单/合同解析 |
-| POST | `/api/chat` | 问答：检索 → 拼 prompt → LLM → 带引用回答（含 `grounded`）|
+| POST | `/api/chat` | 对话：检索 → prompt → LLM → `answer + grounded + citations` |
+| GET/PUT/POST | `/api/admin/prompts*` | 提示词调试（需 `X-Admin-Token`）|
 
-`/api/cards/from-text` 响应示例：
+🎯 M1 契约变更：卡片对象由 `{raw_text, structured_json, steps}` 简化为
+`{id, title, content_md, stage, source_url, video_id, is_public, created_at}`。
+🎯 M2：链接提取超限返回 `429 {"error": "今日链接提取次数已用完，明天再来吧"}`；对话不限额。
 
-```json
-{
-  "success": true,
-  "cards": [
-    {"id": 1, "stage": "水电改造", "title": "冷热水管走顶规范",
-     "raw_text": "...", "structured_json": "...", "steps": [...],
-     "created_at": "...", "video_id": null}
-  ]
-}
-```
+## 6. 防幻觉策略（✅ 已实现，保持）
 
-### 前端（已实现，任务 8）
+1. **Prompt 约束**：只能依据检索到的知识片段回答；无相关片段时必须先声明
+   「根据你当前的知识库，未找到相关标准」，再给通用建议。
+2. **检索 + 阈值**：`web/core/retrieve.py` 整句短语 FTS → 3-gram 重叠召回 → LIKE 兜底；
+   `grounded` = 有召回且最高分 ≥ `CHAT_MIN_SCORE`。
+3. **前端表达**：有依据 → 绿色「来自你的知识库」+ 可折叠引用；无依据 → 琥珀色
+   「这条回答没有找到你的知识依据，仅供参考」。
 
-- `web/templates/index.html`：三 Tab（提取 / 知识库 / 问答），Tailwind CDN + Alpine.js，零构建。
-- PWA：`web/static/manifest.webmanifest` + 根 scope 的 `/sw.js`（`web/app.py` 路由）+ `web/static/icon.png` / `icon.svg`，
-  可「添加到主屏幕」；移动端 segmented Tab 自适应。
-- 下一阶段前端重构目标：面向 AI 零基础手机用户，保留 3 个核心入口但改为底部固定 Tab，
-  弱化模型、密钥、结构化等技术词，详见 [`FRONTEND_REFACTOR_PLAN.md`](FRONTEND_REFACTOR_PLAN.md)。
-
-`/api/chat` 响应结构：
-
-```json
-{
-  "success": true,
-  "answer": "……",
-  "grounded": true,
-  "citations": [
-    {"id": 1, "title": "冷热水管走顶规范", "excerpt": "...", "score": 3.2}
-  ]
-}
-```
-
----
-
-## 6. 防幻觉策略（核心，必须实现）
-
-1. **Prompt 约束**（任务 6/7）：
-   > 你是一名私人自装助手，只能根据以下提供的知识片段回答问题。如果片段中没有任何相关信息，
-   > 你必须先说"根据你当前的知识库，未找到相关标准"，然后可以补充一段以"以下是通用知识，仅供参考："
-   > 开头的建议。绝对不要编造知识库中没有的内容。
-
-2. **检索阈值**：FTS5 先判断是否有命中；有命中再用 `bm25()` 排序取 Top K（K=5）。
-   - 注意：SQLite `bm25()` **越小越相关**。`db.search_cards` 已将其转为 `score = -bm25`
-     的正向分值（**越大越相关**），上层据此设经验阈值（无命中或最高分低于阈值 → 判定"无依据"）。
-   - trigram 分词器要求查询长度 ≥ 3 字符；过短查询需在 `retrieve` 层做兜底（如 LIKE）。
-   - **实现补充（`web/core/retrieve.py`）**：整句短语 FTS 对「自然语言整句提问」几乎不命中，
-     故在其之上增加 **3-gram 重叠召回**——把问题切成 3 字片段分别检索、按命中片段数排序，
-     实现关键词级别的重合召回；再以整句 LIKE 兜底。`grounded` 判定 = 有召回且最高分 ≥
-     `CHAT_MIN_SCORE`（默认 0.0，可调高以要求更强相关）。
-
-3. **前端展示**：无引用（`grounded=false`）时，回答顶部用黄色警告条提示
-   "以下回答未基于你的个人知识库"。
-
----
-
-## 7. UI/UX 原则（"真正好用"）
-
-- **移动优先 + PWA**：作者在手机上刷视频，录入动作也应在手机上一气呵成
-  （复制分享链接 → 粘贴 → 自动入库）。加 `manifest.json` 即可"添加到主屏幕"。
-- **一键化录入**：链接版录入只需一个输入框 + 一个按钮，实时显示进度，
-  完成后弹出卡片预览供确认/微调（阶段、标题）。
-- **问答带引用**：回答下方折叠展示引用卡片，可点击查看原文。
-- 底部固定三 Tab：收集 / 知识库 / 问答。沿用现有 Tailwind + Alpine，零构建，优先保证单手操作。
-
----
-
-## 8. 关键技术决策与取舍
-
-| 决策 | 选择 | 理由 / 取舍 |
-|---|---|---|
-| 中文全文检索 | FTS5 `tokenize='trigram'` | 默认分词器不切中文；trigram 零依赖支持子串检索（需 SQLite ≥ 3.34）。更高精度可后续上 jieba |
-| bm25 方向 | 转为正向 `score` | SQLite bm25 越小越相关，统一为越大越相关便于设阈值 |
-| LLM 供应商 | OpenAI 兼容 + env 配置 | 默认硅基流动（与 ASR 同平台，一个 Key 搞定），随时可换 OpenAI/DeepSeek/本地模型 |
-| 录入耗时 | 链接版需异步 | 下载+转写+结构化可能 20~60s，必须异步 + 进度，避免前端卡死 |
-| 去重 | `UNIQUE(user_id, video_id)` | 同一用户不重复入库；不同用户可存同一视频（任务 10 起）|
-| 用户隔离 | `user_id` + Bearer token | 微信 openid；Web 用 `local-web` 兼容用户 |
-| 依赖注入 | `get_db`/`get_current_user`/`get_llm_client` | 测试可覆盖，无需真实网络/Key |
-| 测试策略 | TDD | 先写测试再实现，核心逻辑全覆盖 |
-
----
-
-## 9. 配置项（环境变量）
+## 7. 配置项（环境变量，`.env`）
 
 | 变量 | 默认 | 用途 |
 |---|---|---|
-| `API_KEY` | — | 语音识别（ASR）密钥，也作为 LLM_API_KEY 的回退 |
-| `LLM_API_KEY` | 回退 `API_KEY` | LLM 密钥 |
-| `LLM_BASE_URL` | `https://api.siliconflow.cn/v1` | LLM 接口地址（可换供应商）|
-| `LLM_MODEL` | `Qwen/Qwen2.5-7B-Instruct` | LLM 模型名 |
-| `LLM_TIMEOUT` | `60` | LLM 请求超时（秒）|
-| `LLM_MAX_RETRIES` | `3` | LLM 重试次数（指数退避）|
-| `KNOWLEDGE_DB` | `data/knowledge.db` | SQLite 文件路径 |
-| `CHAT_MIN_SCORE` | `0.0` | 问答 `grounded` 判定阈值（最高召回分低于此 → 判为无依据）|
-| `PORT` | `8080` | WebUI 端口 |
-| `WECHAT_APPID` | — | 微信小程序 AppID（任务 11）|
-| `WECHAT_SECRET` | — | 微信小程序 AppSecret（任务 11）|
-| `SESSION_SECRET` | — | HMAC 会话签名密钥（任务 11）|
-| `ALLOW_LOCAL_AUTH` | `0` | 为 `1` 时允许 `POST /api/auth/local`（Web 兼容）|
+| `API_KEY` | — | ASR 密钥（也作 LLM Key 回退）|
+| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 硅基流动 / Qwen3-8B | LLM 配置 |
+| `ASR_MODEL` | SenseVoiceSmall | 语音识别模型 |
+| `KNOWLEDGE_DB` | `data/knowledge.db` | SQLite 路径 |
+| `VIDEO_CACHE_DIR` | `data/video_cache` | 视频缓存目录 |
+| `CHAT_MIN_SCORE` | `0.0` | grounded 判定阈值 |
+| `WECHAT_APPID` / `WECHAT_SECRET` | — | 小程序登录 |
+| `SESSION_SECRET` | — | HMAC 会话签名 |
+| `ALLOW_LOCAL_AUTH` | `0` | `1` 时允许 Web 本地登录 |
+| `ADMIN_TOKEN` / `PROMPTS_FILE` | — | 提示词调试 |
+| `DAILY_EXTRACT_LIMIT` | `10` | 🎯 M2：level 0 每日链接提取限额（对话不限）|
+| `PORT` | `8080` | 服务端口 |
 
----
+## 8. 不做的事情（红线）
 
-## 10. 不做的事情（红线）
-
-- 不做社交分享、副本分支、版本管理、多租户协作。
-- 不做向量数据库、图数据库（保留后续扩展）。
-- 不做链接自动抓取以外的反爬对抗（人工粘贴链接优先）。
-- 不做商业化/社区功能；不把 API Key 放进小程序客户端。
-- 不引入 uni-app / Taro；小程序用微信原生。
-- 本期不做多实例 Redis 任务队列（继续单机内存队列 + SQLite）。
-
-> **用户与登录（已调整）**：原「不做用户系统」红线已取消。现采用**微信登录 + 按 openid / user_id 隔离知识库**；
-> WebUI 以 `ALLOW_LOCAL_AUTH` 本地登录兼容。JSON 业务契约形状尽量保持不变，仅增加鉴权与作用域。
-> 详细改造步骤见 [`WECHAT_MINIPROGRAM_PLAN.md`](WECHAT_MINIPROGRAM_PLAN.md)。
+- 不做复杂商业化 / 计费；限额只做简单每日计数。
+- 不做向量数据库；FTS5 足够，保留扩展空间。
+- 不做多实例部署 / Redis 队列；单机 SQLite + 内存任务队列。
+- 不引入 uni-app / Taro；小程序用微信原生 + TDesign。
+- 不把任何密钥放进小程序客户端。
+- Web 前端只维持可用，不再新增功能。

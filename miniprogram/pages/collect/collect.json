@@ -5,6 +5,7 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-progress": "tdesign-miniprogram/progress/progress",
     "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-icon": "tdesign-miniprogram/icon/icon"
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "login-guard": "/components/login-guard/index"
   }
 }

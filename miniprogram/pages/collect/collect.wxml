@@ -1,4 +1,6 @@
 <view class="page-root">
+  <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
+  <block wx:if="{{!needLogin}}">
   <view class="page-header">
     <view>
       <view class="page-title">收集</view>
@@ -43,9 +45,10 @@
     <t-cell
       wx:if="{{lastCard}}"
       title="{{lastCard.title || '未命名'}}"
-      description="{{lastCard.raw_text}}"
+      description="{{lastCard.excerpt}}"
       hover
       class="preview-cell"
     />
   </scroll-view>
+  </block>
 </view>

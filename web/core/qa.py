@@ -11,10 +11,10 @@ EXCERPT_LEN = 140
 
 def _format_card(idx: int, card: dict) -> str:
     title = (card.get("title") or "(无标题)").strip()
-    raw = (card.get("raw_text") or "").strip()
+    body = (card.get("content_md") or "").strip()
     block = [f"【片段{idx}】标题：{title}"]
-    if raw:
-        block.append("内容：" + raw)
+    if body:
+        block.append("内容：" + body)
     return "\n".join(block)
 
 
@@ -66,8 +66,8 @@ def build_messages(
 
 def to_citation(card: dict) -> dict:
     """把命中卡片转为精简引用对象。"""
-    raw = (card.get("raw_text") or "").strip()
-    excerpt = raw[:EXCERPT_LEN] + ("…" if len(raw) > EXCERPT_LEN else "")
+    body = (card.get("content_md") or "").strip()
+    excerpt = body[:EXCERPT_LEN] + ("…" if len(body) > EXCERPT_LEN else "")
     return {
         "id": card.get("id"),
         "title": card.get("title"),

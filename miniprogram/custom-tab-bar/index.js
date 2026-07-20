@@ -1,10 +1,10 @@
 Component({
   data: {
-    value: 'collect',
+    value: 'chat',
     list: [
       { value: 'collect', icon: 'upload', text: '收集', url: '/pages/collect/collect' },
+      { value: 'chat', icon: 'chat', text: 'AI 助手', url: '/pages/chat/chat' },
       { value: 'knowledge', icon: 'book', text: '知识库', url: '/pages/knowledge/knowledge' },
-      { value: 'chat', icon: 'chat', text: '问答', url: '/pages/chat/chat' },
     ],
   },
   methods: {

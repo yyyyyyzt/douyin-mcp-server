@@ -1,6 +1,5 @@
-"""db 层用户隔离测试（TDD）：users 表、按 user_id 作用域、迁移、去重。"""
+"""db 层用户隔离测试：users 表、按 user_id 作用域、去重。"""
 
-import json
 import sqlite3
 
 import pytest
@@ -24,11 +23,7 @@ def _sample(**overrides):
     card = dict(
         stage="水电改造",
         title="冷热水管走顶规范",
-        raw_text="冷热水管要走顶，弹线定位，误差小于2毫米，避开承重墙和电线管。",
-        structured_json=json.dumps(
-            {"stage": "水电改造", "title": "冷热水管走顶规范", "steps": []},
-            ensure_ascii=False,
-        ),
+        content_md="冷热水管要走顶，弹线定位，误差小于2毫米，避开承重墙和电线管。",
         source_type="manual",
         source_url=None,
         video_id=None,
@@ -43,7 +38,6 @@ def test_users_table_and_ensure_user(conn):
     row = db.get_user_by_openid(conn, "openid-a")
     assert row is not None
     assert row["openid"] == "openid-a"
-    # 幂等
     assert db.ensure_user(conn, "openid-a") == uid
 
 
@@ -59,6 +53,8 @@ def test_insert_requires_user_id(conn):
     got = db.get_card(conn, card_id, uid)
     assert got is not None
     assert got["user_id"] == uid
+    assert got["is_public"] == 0
+    assert got["content_md"]
 
 
 def test_users_cannot_see_each_others_cards(conn):
@@ -100,57 +96,35 @@ def test_update_delete_scoped_to_user(conn):
 def test_search_cards_scoped_by_user(conn):
     ua = _user(conn, "user-a")
     ub = _user(conn, "user-b")
-    db.insert_card(conn, ua, **_sample(title="卫生间防水高度", raw_text="防水要刷到1.8米"))
-    db.insert_card(conn, ub, **_sample(title="厨房插座布局", raw_text="厨房插座要预留足够数量"))
+    db.insert_card(
+        conn, ua, **_sample(title="卫生间防水高度", content_md="防水要刷到1.8米")
+    )
+    db.insert_card(
+        conn, ub, **_sample(title="厨房插座布局", content_md="厨房插座要预留足够数量")
+    )
     a_hits = db.search_cards(conn, "卫生间防水", ua)
     b_hits = db.search_cards(conn, "卫生间防水", ub)
     assert len(a_hits) >= 1
     assert b_hits == []
 
 
-def test_migrate_legacy_db_without_user_id(tmp_path):
-    """模拟旧库：无 users / user_id，迁移后数据归属 local-web。"""
-    path = str(tmp_path / "legacy.db")
-    c = db.connect(path)
-    c.executescript(
-        """
-        CREATE TABLE knowledge_cards (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            stage TEXT,
-            title TEXT,
-            raw_text TEXT NOT NULL,
-            structured_json TEXT,
-            source_type TEXT DEFAULT 'manual',
-            source_url TEXT,
-            video_id TEXT UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE VIRTUAL TABLE knowledge_fts USING fts5(
-            title, raw_text,
-            content='knowledge_cards', content_rowid='id',
-            tokenize='trigram'
-        );
-        CREATE TRIGGER knowledge_cards_ai AFTER INSERT ON knowledge_cards BEGIN
-            INSERT INTO knowledge_fts(rowid, title, raw_text)
-            VALUES (new.id, new.title, new.raw_text);
-        END;
-        """
-    )
-    c.execute(
-        "INSERT INTO knowledge_cards (title, raw_text) VALUES (?, ?)",
-        ("旧数据标题", "旧数据正文内容"),
-    )
-    c.commit()
-    c.close()
+def test_user_has_level_default_zero(conn):
+    uid = _user(conn, "level-user")
+    row = db.get_user_by_id(conn, uid)
+    assert row["level"] == 0
 
-    c2 = db.connect(path)
-    db.init_db(c2)
-    local_id = db.ensure_local_web_user(c2)
-    rows = c2.execute("SELECT id, user_id, title FROM knowledge_cards").fetchall()
-    assert len(rows) == 1
-    assert rows[0]["user_id"] == local_id
-    assert rows[0]["title"] == "旧数据标题"
-    got = db.get_card(c2, rows[0]["id"], local_id)
-    assert got is not None
-    c2.close()
+
+def test_extract_usage_increment_and_reset_by_day(conn):
+    uid = _user(conn, "usage-user")
+    assert db.get_extract_calls(conn, uid, day="2026-07-20") == 0
+    assert db.increment_extract_calls(conn, uid, day="2026-07-20") == 1
+    assert db.increment_extract_calls(conn, uid, day="2026-07-20") == 2
+    assert db.get_extract_calls(conn, uid, day="2026-07-21") == 0
+
+
+def test_transcript_cache_roundtrip(conn):
+    assert db.get_transcript(conn, "vid1", "model-a") is None
+    db.save_transcript(conn, "vid1", "model-a", "转写文本")
+    assert db.get_transcript(conn, "vid1", "model-a") == "转写文本"
+    db.save_transcript(conn, "vid1", "model-a", "更新后的转写")
+    assert db.get_transcript(conn, "vid1", "model-a") == "更新后的转写"

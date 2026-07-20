@@ -18,6 +18,12 @@ DEFAULT_ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
 DEFAULT_LLM_TIMEOUT = 60
 DEFAULT_LLM_MAX_RETRIES = 3
 
+# 链接提取每日限额（按 users.level；对话不限额）
+DAILY_EXTRACT_LIMITS = {
+    0: 10,
+    1: 50,
+}
+
 # 可选模型目录（tier: standard 免费档 / premium 高级档，后期可对 premium 做付费 gating）
 LLM_MODEL_CATALOG = [
     {
@@ -174,3 +180,25 @@ def resolve_llm_model(request_model: str = "") -> str:
 def resolve_asr_model(request_model: str = "") -> str:
     chosen = (request_model or "").strip()
     return chosen or get_settings().asr_model
+
+
+def get_daily_extract_limit(level: int = 0) -> int:
+    """返回用户等级对应的每日链接提取限额。
+
+    环境变量 DAILY_EXTRACT_LIMIT 可覆盖 level 0 的默认值。
+    """
+    try:
+        level = int(level)
+    except (TypeError, ValueError):
+        level = 0
+    if level <= 0:
+        env = os.getenv("DAILY_EXTRACT_LIMIT", "").strip()
+        if env:
+            try:
+                return max(0, int(env))
+            except ValueError:
+                pass
+        return DAILY_EXTRACT_LIMITS.get(0, 10)
+    if level in DAILY_EXTRACT_LIMITS:
+        return DAILY_EXTRACT_LIMITS[level]
+    return DAILY_EXTRACT_LIMITS.get(max(DAILY_EXTRACT_LIMITS), 10)

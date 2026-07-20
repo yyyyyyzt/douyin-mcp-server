@@ -1,7 +1,7 @@
 """Environment smoke tests.
 
 These verify the dev environment is wired up correctly:
-- core packages import (ffmpeg-python, mcp, fastapi)
+- core packages import (ffmpeg-python, fastapi, douyin_downloader)
 - the WebUI FastAPI app responds on its health endpoint (exercised with httpx)
 
 They intentionally avoid any network calls to Douyin / ASR APIs.
@@ -19,10 +19,11 @@ sys.path.insert(0, str(ROOT / "web"))
 
 def test_core_imports():
     import ffmpeg  # noqa: F401
-    import mcp  # noqa: F401
-    from douyin_mcp_server import server  # noqa: F401
+    import fastapi  # noqa: F401
+    import douyin_downloader
 
-    assert hasattr(server, "parse_douyin_video_info")
+    assert hasattr(douyin_downloader, "extract_text")
+    assert hasattr(douyin_downloader, "get_video_info")
 
 
 def test_webui_health_endpoint():

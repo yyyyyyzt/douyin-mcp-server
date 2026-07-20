@@ -1,14 +1,17 @@
 """SQLite + FTS5 知识卡片存储与检索（按 user_id 隔离）。
 
-设计要点：
-- users 表存微信 openid（Web 兼容用户 openid=local-web）。
-- knowledge_cards 带 user_id，去重为 UNIQUE(user_id, video_id)。
-- FTS5 external content + trigram 中文检索；检索 JOIN 主表并过滤 user_id。
+Schema（无历史迁移）：
+- users：openid + level（提取限额用）
+- knowledge_cards：content_md 为唯一正文，默认私有 is_public=0
+- knowledge_fts：title + content_md（trigram）
+- llm_usage：每日链接提取计数
+- transcripts：转写共享缓存 (video_id, asr_model)
 """
 
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from typing import Any, Optional
 
 LOCAL_WEB_OPENID = "local-web"
@@ -18,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     openid TEXT NOT NULL UNIQUE,
     unionid TEXT,
+    level INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP
 );
@@ -25,13 +29,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS knowledge_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL DEFAULT '',
+    content_md TEXT NOT NULL,
     stage TEXT,
-    title TEXT,
-    raw_text TEXT NOT NULL,
-    structured_json TEXT,
     source_type TEXT DEFAULT 'manual',
     source_url TEXT,
     video_id TEXT,
+    is_public INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, video_id)
@@ -39,57 +43,53 @@ CREATE TABLE IF NOT EXISTS knowledge_cards (
 
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
     title,
-    raw_text,
+    content_md,
     content='knowledge_cards',
     content_rowid='id',
     tokenize='trigram'
 );
 
 CREATE TRIGGER IF NOT EXISTS knowledge_cards_ai AFTER INSERT ON knowledge_cards BEGIN
-    INSERT INTO knowledge_fts(rowid, title, raw_text)
-    VALUES (new.id, new.title, new.raw_text);
+    INSERT INTO knowledge_fts(rowid, title, content_md)
+    VALUES (new.id, new.title, new.content_md);
 END;
 
 CREATE TRIGGER IF NOT EXISTS knowledge_cards_ad AFTER DELETE ON knowledge_cards BEGIN
-    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, raw_text)
-    VALUES ('delete', old.id, old.title, old.raw_text);
+    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content_md)
+    VALUES ('delete', old.id, old.title, old.content_md);
 END;
 
 CREATE TRIGGER IF NOT EXISTS knowledge_cards_au AFTER UPDATE ON knowledge_cards BEGIN
-    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, raw_text)
-    VALUES ('delete', old.id, old.title, old.raw_text);
-    INSERT INTO knowledge_fts(rowid, title, raw_text)
-    VALUES (new.id, new.title, new.raw_text);
-END;
-"""
-
-_LEGACY_FTS_TRIGGERS = """
-CREATE TRIGGER IF NOT EXISTS knowledge_cards_ai AFTER INSERT ON knowledge_cards BEGIN
-    INSERT INTO knowledge_fts(rowid, title, raw_text)
-    VALUES (new.id, new.title, new.raw_text);
+    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content_md)
+    VALUES ('delete', old.id, old.title, old.content_md);
+    INSERT INTO knowledge_fts(rowid, title, content_md)
+    VALUES (new.id, new.title, new.content_md);
 END;
 
-CREATE TRIGGER IF NOT EXISTS knowledge_cards_ad AFTER DELETE ON knowledge_cards BEGIN
-    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, raw_text)
-    VALUES ('delete', old.id, old.title, old.raw_text);
-END;
+CREATE TABLE IF NOT EXISTS llm_usage (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    day TEXT NOT NULL,
+    extract_calls INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+);
 
-CREATE TRIGGER IF NOT EXISTS knowledge_cards_au AFTER UPDATE ON knowledge_cards BEGIN
-    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, raw_text)
-    VALUES ('delete', old.id, old.title, old.raw_text);
-    INSERT INTO knowledge_fts(rowid, title, raw_text)
-    VALUES (new.id, new.title, new.raw_text);
-END;
+CREATE TABLE IF NOT EXISTS transcripts (
+    video_id TEXT NOT NULL,
+    asr_model TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (video_id, asr_model)
+);
 """
 
 _UPDATABLE_FIELDS = {
-    "stage",
     "title",
-    "raw_text",
-    "structured_json",
+    "content_md",
+    "stage",
     "source_type",
     "source_url",
     "video_id",
+    "is_public",
 }
 
 
@@ -100,84 +100,8 @@ def connect(db_path: str) -> sqlite3.Connection:
     return conn
 
 
-def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-
-
-def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
-    """将旧版全局 video_id UNIQUE 库迁移为按 user_id 隔离。"""
-    tables = {
-        row[0]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-    }
-    if "knowledge_cards" not in tables:
-        return
-
-    cols = _table_columns(conn, "knowledge_cards")
-    if "user_id" in cols:
-        return
-
-    local_id = ensure_local_web_user(conn)
-    conn.execute("ALTER TABLE knowledge_cards ADD COLUMN user_id INTEGER")
-    conn.execute("UPDATE knowledge_cards SET user_id = ?", (local_id,))
-
-    conn.executescript(
-        """
-        CREATE TABLE knowledge_cards_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            stage TEXT,
-            title TEXT,
-            raw_text TEXT NOT NULL,
-            structured_json TEXT,
-            source_type TEXT DEFAULT 'manual',
-            source_url TEXT,
-            video_id TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, video_id)
-        );
-        INSERT INTO knowledge_cards_new (
-            id, user_id, stage, title, raw_text, structured_json,
-            source_type, source_url, video_id, created_at, updated_at
-        )
-        SELECT
-            id, user_id, stage, title, raw_text, structured_json,
-            source_type, source_url, video_id, created_at, updated_at
-        FROM knowledge_cards;
-        DROP TABLE knowledge_cards;
-        ALTER TABLE knowledge_cards_new RENAME TO knowledge_cards;
-        """
-    )
-
-    fts_exists = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='knowledge_fts'"
-    ).fetchone()
-    if not fts_exists:
-        conn.executescript(
-            """
-            CREATE VIRTUAL TABLE knowledge_fts USING fts5(
-                title, raw_text,
-                content='knowledge_cards', content_rowid='id',
-                tokenize='trigram'
-            );
-            """
-        )
-        conn.executescript(_LEGACY_FTS_TRIGGERS)
-        conn.execute(
-            """
-            INSERT INTO knowledge_fts(rowid, title, raw_text)
-            SELECT id, title, raw_text FROM knowledge_cards
-            """
-        )
-    conn.commit()
-
-
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
-    _migrate_legacy_schema(conn)
     conn.commit()
 
 
@@ -228,21 +152,30 @@ def insert_card(
     conn: sqlite3.Connection,
     user_id: int,
     *,
+    title: str = "",
+    content_md: str,
     stage: Optional[str] = None,
-    title: Optional[str] = None,
-    raw_text: str,
-    structured_json: Optional[str] = None,
     source_type: str = "manual",
     source_url: Optional[str] = None,
     video_id: Optional[str] = None,
+    is_public: int = 0,
 ) -> int:
     cur = conn.execute(
         """
         INSERT INTO knowledge_cards
-            (user_id, stage, title, raw_text, structured_json, source_type, source_url, video_id)
+            (user_id, title, content_md, stage, source_type, source_url, video_id, is_public)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (user_id, stage, title, raw_text, structured_json, source_type, source_url, video_id),
+        (
+            user_id,
+            title or "",
+            content_md,
+            stage,
+            source_type,
+            source_url,
+            video_id,
+            int(is_public),
+        ),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -346,3 +279,57 @@ def search_cards(
         item["score"] = -bm25
         results.append(item)
     return results
+
+
+# ---------- 链接提取限额 ----------
+
+def get_extract_calls(conn: sqlite3.Connection, user_id: int, day: Optional[str] = None) -> int:
+    day = day or date.today().isoformat()
+    row = conn.execute(
+        "SELECT extract_calls FROM llm_usage WHERE user_id = ? AND day = ?",
+        (user_id, day),
+    ).fetchone()
+    return int(row["extract_calls"]) if row else 0
+
+
+def increment_extract_calls(
+    conn: sqlite3.Connection, user_id: int, day: Optional[str] = None
+) -> int:
+    day = day or date.today().isoformat()
+    conn.execute(
+        """
+        INSERT INTO llm_usage (user_id, day, extract_calls) VALUES (?, ?, 1)
+        ON CONFLICT(user_id, day) DO UPDATE SET
+            extract_calls = extract_calls + 1
+        """,
+        (user_id, day),
+    )
+    conn.commit()
+    return get_extract_calls(conn, user_id, day)
+
+
+# ---------- 转写共享缓存 ----------
+
+def get_transcript(
+    conn: sqlite3.Connection, video_id: str, asr_model: str
+) -> Optional[str]:
+    row = conn.execute(
+        "SELECT text FROM transcripts WHERE video_id = ? AND asr_model = ?",
+        (video_id, asr_model),
+    ).fetchone()
+    return row["text"] if row else None
+
+
+def save_transcript(
+    conn: sqlite3.Connection, video_id: str, asr_model: str, text: str
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO transcripts (video_id, asr_model, text) VALUES (?, ?, ?)
+        ON CONFLICT(video_id, asr_model) DO UPDATE SET
+            text = excluded.text,
+            created_at = CURRENT_TIMESTAMP
+        """,
+        (video_id, asr_model, text),
+    )
+    conn.commit()

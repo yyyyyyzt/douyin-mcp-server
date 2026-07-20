@@ -76,8 +76,7 @@ def test_user_a_cannot_read_user_b_card(env):
         conn,
         user_b["id"],
         title="B 私密",
-        raw_text="只有 B 能看",
-        structured_json=json.dumps({"title": "B 私密", "content": "只有 B 能看"}, ensure_ascii=False),
+        content_md="只有 B 能看",
     )
     headers = auth_headers(user_a)
     resp = client.get(f"/api/cards/{cid}", headers=headers)

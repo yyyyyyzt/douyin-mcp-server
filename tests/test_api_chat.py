@@ -30,8 +30,7 @@ def _seed(conn, user_id, stage, title, raw_text):
         user_id,
         stage=stage,
         title=title,
-        raw_text=raw_text,
-        structured_json=json.dumps({"stage": stage, "title": title, "steps": []}, ensure_ascii=False),
+        content_md=raw_text,
         source_type="manual",
     )
 

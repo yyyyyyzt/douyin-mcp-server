@@ -1,8 +1,8 @@
 {
   "pages": [
+    "pages/chat/chat",
     "pages/collect/collect",
     "pages/knowledge/knowledge",
-    "pages/chat/chat",
     "pages/settings/settings"
   ],
   "window": {
@@ -23,12 +23,12 @@
         "text": "收集"
       },
       {
-        "pagePath": "pages/knowledge/knowledge",
-        "text": "知识库"
+        "pagePath": "pages/chat/chat",
+        "text": "AI 助手"
       },
       {
-        "pagePath": "pages/chat/chat",
-        "text": "问答"
+        "pagePath": "pages/knowledge/knowledge",
+        "text": "知识库"
       }
     ]
   },

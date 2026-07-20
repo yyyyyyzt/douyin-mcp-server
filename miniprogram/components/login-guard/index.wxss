@@ -1,0 +1,39 @@
+.login-guard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  flex: 1;
+  min-height: 60vh;
+  padding: 48rpx 40rpx;
+  box-sizing: border-box;
+}
+
+.brand {
+  font-size: 56rpx;
+  font-weight: 700;
+  color: #ff6b4a;
+  letter-spacing: 2rpx;
+  margin-bottom: 24rpx;
+}
+
+.headline {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.4;
+  margin-bottom: 16rpx;
+}
+
+.desc {
+  font-size: 28rpx;
+  color: #6b7280;
+  line-height: 1.6;
+  margin-bottom: 56rpx;
+}
+
+.error {
+  margin-top: 24rpx;
+  color: #d97706;
+  font-size: 26rpx;
+}

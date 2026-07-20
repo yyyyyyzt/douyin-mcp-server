@@ -1,10 +1,17 @@
 const { request } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
+const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
+const { mdToNodes, mdExcerpt } = require('../../utils/markdown');
 
 const STAGES = ['全部', '水电', '防水', '泥木', '油漆', '验收', '其他'];
 
+function cardBody(c) {
+  return c.content_md || c.content || '';
+}
+
 Page({
   data: {
+    needLogin: false,
     cards: [],
     filtered: [],
     loading: false,
@@ -13,6 +20,7 @@ Page({
     stages: STAGES,
     detailVisible: false,
     detail: null,
+    detailHtml: '',
     editing: false,
     editTitle: '',
     editBody: '',
@@ -20,7 +28,13 @@ Page({
 
   onShow() {
     syncTabBarForRoute(this);
-    this.loadCards();
+    if (refreshLoginState(this)) {
+      this.loadCards();
+    }
+  },
+
+  onLoginSuccess() {
+    onLoginSuccess(this, () => this.loadCards());
   },
 
   goSettings() {
@@ -47,10 +61,15 @@ Page({
       list = list.filter(
         (c) =>
           (c.title || '').toLowerCase().includes(q) ||
-          (c.raw_text || '').toLowerCase().includes(q)
+          cardBody(c).toLowerCase().includes(q)
       );
     }
-    this.setData({ filtered: list });
+    this.setData({
+      filtered: list.map((c) => ({
+        ...c,
+        excerpt: mdExcerpt(cardBody(c)),
+      })),
+    });
   },
 
   async loadCards() {
@@ -59,7 +78,8 @@ Page({
       const d = await request({ url: '/api/cards' });
       this.setData({ cards: d.cards || [] }, () => this.applyFilter());
     } catch (e) {
-      wx.showToast({ title: '加载失败', icon: 'none' });
+      refreshLoginState(this);
+      wx.showToast({ title: e.message || '加载失败', icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
@@ -81,17 +101,19 @@ Page({
     const id = e.currentTarget.dataset.id;
     const card = this.data.cards.find((c) => c.id === id);
     if (!card) return;
+    const body = cardBody(card);
     this.setData({
       detailVisible: true,
       detail: card,
+      detailHtml: mdToNodes(body),
       editing: false,
       editTitle: card.title || '',
-      editBody: card.raw_text || '',
+      editBody: body,
     });
   },
 
   closeDetail() {
-    this.setData({ detailVisible: false, detail: null, editing: false });
+    this.setData({ detailVisible: false, detail: null, editing: false, detailHtml: '' });
   },
 
   onPopupVisibleChange(e) {
@@ -117,7 +139,7 @@ Page({
       await request({
         url: `/api/cards/${card.id}`,
         method: 'PUT',
-        data: { title: this.data.editTitle, raw_text: this.data.editBody },
+        data: { title: this.data.editTitle, content_md: this.data.editBody },
       });
       wx.showToast({ title: '已保存', icon: 'success' });
       this.closeDetail();
@@ -130,21 +152,21 @@ Page({
   async deleteDetail() {
     const card = this.data.detail;
     if (!card) return;
-    const ok = await new Promise((resolve) => {
-      wx.showModal({
-        title: '确认删除',
-        content: '确定删除这条知识？',
-        success: (r) => resolve(r.confirm),
-      });
+    const that = this;
+    wx.showModal({
+      title: '确认删除',
+      content: '删除后不可恢复',
+      success: async (res) => {
+        if (!res.confirm) return;
+        try {
+          await request({ url: `/api/cards/${card.id}`, method: 'DELETE' });
+          wx.showToast({ title: '已删除', icon: 'success' });
+          that.closeDetail();
+          that.loadCards();
+        } catch (e) {
+          wx.showToast({ title: e.message || '删除失败', icon: 'none' });
+        }
+      },
     });
-    if (!ok) return;
-    try {
-      await request({ url: `/api/cards/${card.id}`, method: 'DELETE' });
-      wx.showToast({ title: '已删除', icon: 'success' });
-      this.closeDetail();
-      this.loadCards();
-    } catch (e) {
-      wx.showToast({ title: '删除失败', icon: 'none' });
-    }
   },
 });
