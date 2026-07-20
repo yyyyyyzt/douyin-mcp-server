@@ -1,6 +1,4 @@
-"""API 测试（TDD）：PUT /api/cards/{id} 编辑 + DELETE /api/cards/{id} 删除。"""
-
-import json
+"""API 测试：PUT /api/cards/{id} 编辑 + DELETE /api/cards/{id} 删除。"""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,10 +6,6 @@ from fastapi.testclient import TestClient
 import app as webapp
 from core import db
 from tests.helpers import auth_headers, clear_app_overrides, ensure_test_user, override_current_user
-
-
-def _structured(title, content):
-    return json.dumps({"title": title, "content": content}, ensure_ascii=False)
 
 
 @pytest.fixture()
@@ -30,18 +24,17 @@ def env(tmp_path):
     conn.close()
 
 
-def _seed(conn, user_id, *, title="冷热水管走顶规范", raw_text="冷热水管走顶，弹线定位，误差≤2mm。"):
+def _seed(conn, user_id, *, title="冷热水管走顶规范", content_md="冷热水管走顶，弹线定位，误差≤2mm。"):
     return db.insert_card(
         conn,
         user_id,
         title=title,
-        raw_text=raw_text,
-        structured_json=_structured(title, raw_text),
+        content_md=content_md,
         source_type="manual",
     )
 
 
-def test_update_text_fields_and_sync_structured_json(env):
+def test_update_content_md_and_title(env):
     client, conn, user, headers = env
     cid = _seed(conn, user["id"])
 
@@ -49,27 +42,28 @@ def test_update_text_fields_and_sync_structured_json(env):
         f"/api/cards/{cid}",
         json={
             "title": "瓷砖通铺排版规范",
-            "raw_text": "瓷砖通铺，先做排版图。",
+            "content_md": "瓷砖通铺，先做排版图。",
         },
         headers=headers,
     )
     assert resp.status_code == 200
     card = resp.json()["card"]
     assert card["title"] == "瓷砖通铺排版规范"
-    assert card["raw_text"] == "瓷砖通铺，先做排版图。"
-    sj = json.loads(card["structured_json"])
-    assert sj["title"] == "瓷砖通铺排版规范"
-    assert sj["content"] == "瓷砖通铺，先做排版图。"
+    assert card["content_md"] == "瓷砖通铺，先做排版图。"
+    assert card["content"] == "瓷砖通铺，先做排版图。"
+    assert "structured_json" not in card
 
 
-def test_update_partial_only_raw_text_keeps_other_fields(env):
+def test_update_accepts_raw_text_alias(env):
     client, conn, user, headers = env
     cid = _seed(conn, user["id"])
 
-    resp = client.put(f"/api/cards/{cid}", json={"raw_text": "更正后的文案内容。"}, headers=headers)
+    resp = client.put(
+        f"/api/cards/{cid}", json={"raw_text": "更正后的文案内容。"}, headers=headers
+    )
     assert resp.status_code == 200
     card = resp.json()["card"]
-    assert card["raw_text"] == "更正后的文案内容。"
+    assert card["content_md"] == "更正后的文案内容。"
     assert card["title"] == "冷热水管走顶规范"
 
 
@@ -114,10 +108,10 @@ def test_update_empty_body_returns_400(env):
     assert resp.status_code == 400
 
 
-def test_update_empty_raw_text_returns_400(env):
+def test_update_empty_content_returns_400(env):
     client, conn, user, headers = env
     cid = _seed(conn, user["id"])
-    resp = client.put(f"/api/cards/{cid}", json={"raw_text": "   "}, headers=headers)
+    resp = client.put(f"/api/cards/{cid}", json={"content_md": "   "}, headers=headers)
     assert resp.status_code == 400
 
 

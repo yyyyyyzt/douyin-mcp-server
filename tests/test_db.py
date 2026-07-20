@@ -25,8 +25,7 @@ def _sample(**overrides):
     card = dict(
         stage="水电改造",
         title="冷热水管走顶规范",
-        raw_text="冷热水管要走顶，弹线定位，误差小于2毫米，避开承重墙和电线管。",
-        structured_json=json.dumps({"stage": "水电改造", "title": "冷热水管走顶规范", "steps": []}, ensure_ascii=False),
+        content_md="冷热水管要走顶，弹线定位，误差小于2毫米，避开承重墙和电线管。",
         source_type="manual",
         source_url=None,
         video_id=None,
@@ -45,6 +44,8 @@ def test_init_db_creates_tables(conn):
     assert "knowledge_cards" in names
     assert "knowledge_fts" in names
     assert "users" in names
+    assert "llm_usage" in names
+    assert "transcripts" in names
 
 
 def test_init_db_is_idempotent(tmp_path):
@@ -62,7 +63,7 @@ def test_insert_and_get_card(conn, uid):
     assert got is not None
     assert got["stage"] == "水电改造"
     assert got["title"] == "冷热水管走顶规范"
-    assert "承重墙" in got["raw_text"]
+    assert "承重墙" in got["content_md"]
     assert got["created_at"]
 
 
@@ -115,8 +116,8 @@ def test_delete_card(conn, uid):
 
 
 def test_fts_search_finds_card_by_chinese_keyword(conn, uid):
-    db.insert_card(conn, uid, **_sample(title="冷热水管走顶规范", raw_text="冷热水管走顶，避开承重墙"))
-    db.insert_card(conn, uid, **_sample(title="瓷砖铺贴", raw_text="瓷砖空鼓率不超过百分之五", video_id="v2"))
+    db.insert_card(conn, uid, **_sample(title="冷热水管走顶规范", content_md="冷热水管走顶，避开承重墙"))
+    db.insert_card(conn, uid, **_sample(title="瓷砖铺贴", content_md="瓷砖空鼓率不超过百分之五", video_id="v2"))
 
     results = db.search_cards(conn, "冷热水管", uid, top_k=5)
     assert len(results) >= 1
@@ -125,18 +126,18 @@ def test_fts_search_finds_card_by_chinese_keyword(conn, uid):
 
 
 def test_fts_search_no_match_returns_empty(conn, uid):
-    db.insert_card(conn, uid, **_sample(title="冷热水管", raw_text="冷热水管走顶"))
+    db.insert_card(conn, uid, **_sample(title="冷热水管", content_md="冷热水管走顶"))
     assert db.search_cards(conn, "完全无关的查询内容xyz", uid, top_k=5) == []
 
 
 def test_fts_index_updates_after_edit(conn, uid):
-    card_id = db.insert_card(conn, uid, **_sample(title="原始标题", raw_text="原始内容描述文字"))
-    db.update_card(conn, card_id, uid, raw_text="瓷砖空鼓率检测标准")
+    card_id = db.insert_card(conn, uid, **_sample(title="原始标题", content_md="原始内容描述文字"))
+    db.update_card(conn, card_id, uid, content_md="瓷砖空鼓率检测标准")
     assert db.search_cards(conn, "原始内容描述", uid, top_k=5) == []
     assert len(db.search_cards(conn, "瓷砖空鼓率", uid, top_k=5)) == 1
 
 
 def test_fts_index_removed_after_delete(conn, uid):
-    card_id = db.insert_card(conn, uid, **_sample(title="冷热水管", raw_text="冷热水管走顶规范说明"))
+    card_id = db.insert_card(conn, uid, **_sample(title="冷热水管", content_md="冷热水管走顶规范说明"))
     db.delete_card(conn, card_id, uid)
     assert db.search_cards(conn, "冷热水管走顶", uid, top_k=5) == []

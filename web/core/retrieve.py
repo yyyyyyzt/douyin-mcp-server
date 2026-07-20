@@ -45,7 +45,7 @@ def _like_fallback(
     rows = conn.execute(
         """
         SELECT * FROM knowledge_cards
-        WHERE user_id = ? AND (title LIKE ? OR raw_text LIKE ?)
+        WHERE user_id = ? AND (title LIKE ? OR content_md LIKE ?)
         ORDER BY id DESC LIMIT ?
         """,
         (user_id, like, like, top_k),

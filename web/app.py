@@ -169,8 +169,12 @@ def _assert_task_owner(task: Optional[dict], user_id: int) -> dict:
 
 
 def _serialize_card(row: dict) -> dict:
-    """把数据库行转为 API 卡片。"""
-    return dict(row)
+    """把数据库行转为 API 卡片（含 content 别名便于前端）。"""
+    out = dict(row)
+    # 兼容别名：前端可用 content 读写 markdown 正文
+    if "content_md" in out and "content" not in out:
+        out["content"] = out["content_md"]
+    return out
 
 
 class VideoRequest(BaseModel):
@@ -446,7 +450,9 @@ def _run_extract_task(
 
     preview = {
         "title": card.get("title") or title or "",
-        "content": card.get("raw_text") or text,
+        "content": card.get("content_md") or text,
+        "content_md": card.get("content_md") or text,
+        "stage": card.get("stage") or "",
         "transcript": text,
         "video_id": video_id,
         "source_url": url,
@@ -542,10 +548,13 @@ class CardStructureRequest(BaseModel):
 class CardSaveRequest(BaseModel):
     """保存知识卡片（纯存储，不调用 AI）。"""
     title: str = ""
-    content: str
+    content: str = ""  # markdown 正文别名
+    content_md: str = ""
+    stage: Optional[str] = None
     video_id: Optional[str] = None
     source_url: Optional[str] = None
-    transcript: Optional[str] = None  # 原始转写，写入 structured_json 备查
+    transcript: Optional[str] = None  # 保留字段，当前不落库
+    is_public: int = 0
 
 
 @app.post("/api/cards/structure")
@@ -553,7 +562,7 @@ async def structure_card_preview(
     req: CardStructureRequest,
     user: dict = Depends(get_current_user),
 ):
-    """将文案 AI 整理为结构化预览（标题 + 内容），不入库。"""
+    """将文案 AI 整理为 Markdown 预览（标题 + content_md），不入库。"""
     text = (req.text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="文案内容不能为空")
@@ -566,12 +575,14 @@ async def structure_card_preview(
     except LLMError as e:
         raise HTTPException(status_code=502, detail=f"LLM 调用失败: {e}")
 
+    body = card.get("content_md") or text
     return {
         "success": True,
         "preview": {
             "title": card.get("title") or "",
             "stage": card.get("stage") or "",
-            "content": card.get("raw_text") or text,
+            "content": body,
+            "content_md": body,
         },
     }
 
@@ -584,7 +595,7 @@ async def save_card(
 ):
     """保存单条知识卡片（纯存储，不调用 AI）。"""
     title = (req.title or "").strip()
-    content = (req.content or "").strip()
+    content = (req.content_md or req.content or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="内容不能为空")
 
@@ -598,20 +609,17 @@ async def save_card(
                 detail="该视频已入库，可在知识库中编辑或先删除旧记录",
             )
 
-    structured = {"title": title, "content": content}
-    if req.transcript:
-        structured["transcript"] = req.transcript.strip()
-
     try:
         card_id = db.insert_card(
             conn,
             user_id,
-            title=title or None,
-            raw_text=content,
-            structured_json=json.dumps(structured, ensure_ascii=False),
+            title=title,
+            content_md=content,
+            stage=(req.stage or "").strip() or None,
             source_type="douyin_link" if video_id else "manual",
             source_url=req.source_url,
             video_id=video_id,
+            is_public=int(req.is_public or 0),
         )
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=409, detail="该视频已入库")
@@ -756,15 +764,12 @@ def _run_import_task(
 
         # 4) 入库（每个视频一条）
         try:
-            structured = json.loads(card.get("structured_json") or "{}")
-            structured["transcript"] = text
             card_id = db.insert_card(
                 conn,
                 user_id,
                 stage=stage or card.get("stage"),
-                title=card["title"],
-                raw_text=card["raw_text"],
-                structured_json=json.dumps(structured, ensure_ascii=False),
+                title=card.get("title") or "",
+                content_md=card.get("content_md") or text,
                 source_type="douyin_link",
                 source_url=url,
                 video_id=video_id,
@@ -858,9 +863,13 @@ async def get_card_detail(
 
 
 class CardUpdateRequest(BaseModel):
-    """卡片编辑请求：仅标题与正文。"""
+    """卡片编辑请求：标题 / Markdown 正文 / 阶段 / 公开标记。"""
     title: Optional[str] = None
-    raw_text: Optional[str] = None
+    content_md: Optional[str] = None
+    content: Optional[str] = None  # 别名
+    raw_text: Optional[str] = None  # 兼容旧字段名 → content_md
+    stage: Optional[str] = None
+    is_public: Optional[int] = None
 
 
 @app.put("/api/cards/{card_id}")
@@ -870,7 +879,7 @@ async def update_card_endpoint(
     user: dict = Depends(get_current_user),
     conn=Depends(get_db),
 ):
-    """编辑卡片标题与正文，不重新调 AI，同步重写 structured_json。"""
+    """编辑卡片，不重新调 AI。"""
     provided = req.model_dump(exclude_unset=True)
     if not provided:
         raise HTTPException(status_code=400, detail="未提供任何可更新字段")
@@ -879,23 +888,23 @@ async def update_card_endpoint(
     row = db.get_card(conn, card_id, user_id)
     if row is None:
         raise HTTPException(status_code=404, detail="卡片不存在")
-    card = dict(row)
 
-    new_title = provided.get("title", card.get("title")) if "title" in provided else card.get("title")
-    new_raw = card.get("raw_text")
-    if "raw_text" in provided:
-        new_raw = (provided["raw_text"] or "").strip()
-        if not new_raw:
+    fields: dict = {}
+    if "title" in provided:
+        fields["title"] = provided.get("title") or ""
+    body_key = next((k for k in ("content_md", "content", "raw_text") if k in provided), None)
+    if body_key is not None:
+        new_body = (provided.get(body_key) or "").strip()
+        if not new_body:
             raise HTTPException(status_code=400, detail="内容不能为空")
+        fields["content_md"] = new_body
+    if "stage" in provided:
+        fields["stage"] = (provided.get("stage") or "").strip() or None
+    if "is_public" in provided:
+        fields["is_public"] = int(provided.get("is_public") or 0)
 
-    fields = {
-        "title": new_title,
-        "structured_json": json.dumps(
-            {"title": new_title, "content": new_raw}, ensure_ascii=False
-        ),
-    }
-    if "raw_text" in provided:
-        fields["raw_text"] = new_raw
+    if not fields:
+        raise HTTPException(status_code=400, detail="未提供任何可更新字段")
 
     db.update_card(conn, card_id, user_id, **fields)
     return {"success": True, "card": _serialize_card(db.get_card(conn, card_id, user_id))}

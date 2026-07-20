@@ -3,12 +3,16 @@
 from core import qa
 
 
-def _card(id=1, title="卫生间防水高度",
-          raw_text="卫生间防水要刷到1.8米，门口做挡水坝。", score=2.0):
+def _card(
+    id=1,
+    title="卫生间防水高度",
+    content_md="卫生间防水要刷到1.8米，门口做挡水坝。",
+    score=2.0,
+):
     return {
         "id": id,
         "title": title,
-        "raw_text": raw_text,
+        "content_md": content_md,
         "score": score,
     }
 
@@ -32,7 +36,7 @@ def test_build_messages_ungrounded_excludes_cards():
 
 def test_to_citation_shape():
     long_raw = "防" * 300
-    cit = qa.to_citation(_card(raw_text=long_raw, score=3.14159))
+    cit = qa.to_citation(_card(content_md=long_raw, score=3.14159))
     assert cit["id"] == 1
     assert cit["title"] == "卫生间防水高度"
     assert len(cit["excerpt"]) <= qa.EXCERPT_LEN + 1

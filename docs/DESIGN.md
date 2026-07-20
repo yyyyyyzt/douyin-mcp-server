@@ -16,10 +16,11 @@
 - **主形态**：**微信原生小程序**（`miniprogram/`）。Web（`web/templates/index.html`）仅作
   开发调试与自托管兼容入口，不再新增功能。
 - **核心理念**：
-  1. **AI 对话是产品的中心**：进入小程序即是对话页；收集与管理知识都是为对话服务的。
+  1. **AI 对话是产品的中心**：进入小程序即是对话页（Tab 文案「AI 助手」）；收集与管理知识都是为对话服务的。
   2. **收藏即拥有**：粘贴抖音分享链接即可自动转写、整理、入库，无需手动誊抄。
-  3. **知识以共享为主**：产品不做复杂商业化；后期以共享优质装修知识为主要方向。
+  3. **知识默认私有**：`is_public` 默认 0；公开后如何分享 → 下一步规划。
   4. **防幻觉**：回答必须声明是否基于用户知识库，绝不编造。
+  5. **Web 冻结**：仅不方便使用小程序时调试，不再新增功能。
 
 ## 2. 信息架构（🎯 目标，对应 DEV_PLAN 任务 M2）
 
@@ -37,7 +38,7 @@
 | Tab | 位置 | 职责 | 主动作 |
 |---|---|---|---|
 | 收集 | 左 | 把刷到的装修经验存起来 | 粘贴链接/文字 → 保存到知识库 |
-| **AI 对话** | **中（默认落地页）** | 基于知识库对话问答 | 提问、上传报价单、查看依据 |
+| **AI 助手** | **中（默认落地页）** | 基于知识库对话问答 | 提问、上传报价单、查看依据 |
 | 知识库 | 右 | 管理已保存的知识 | 搜索、筛选、查看、编辑、删除 |
 
 - **未登录用户**：打开小程序先尝试 `wx.login` 静默登录；失败或登录态失效时，
@@ -140,7 +141,7 @@ CREATE TABLE knowledge_cards (
     source_type TEXT DEFAULT 'manual',-- 'manual' | 'douyin_link'
     source_url TEXT,
     video_id TEXT,
-    is_public INTEGER NOT NULL DEFAULT 1,  -- 共享知识为主：默认公开，可检索给所有用户
+    is_public INTEGER NOT NULL DEFAULT 0,  -- 默认私有；公开分享 UX 下一步规划
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, video_id)         -- 同一用户不重复入库同一视频
@@ -154,11 +155,10 @@ CREATE VIRTUAL TABLE knowledge_fts USING fts5(
 );
 -- + AFTER INSERT/UPDATE/DELETE 触发器保持同步
 
--- LLM 每日用量（限额）：一天一行，简单计数
+-- 链接提取每日用量（只限提取，不限对话）：一天一行
 CREATE TABLE llm_usage (
     user_id INTEGER NOT NULL REFERENCES users(id),
     day TEXT NOT NULL,                -- 'YYYY-MM-DD'
-    chat_calls INTEGER NOT NULL DEFAULT 0,     -- 对话次数
     extract_calls INTEGER NOT NULL DEFAULT 0,  -- 链接提取（转写+整理）次数
     PRIMARY KEY (user_id, day)
 );
@@ -173,26 +173,25 @@ CREATE TABLE transcripts (
 );
 ```
 
-- ✅ 现状：`users`（无 `level`）、`knowledge_cards`（`raw_text` + `structured_json`，
-  无 `is_public`）已按 `user_id` 隔离；`llm_usage`、`transcripts` 不存在。
-- **检索范围（共享知识）**：问答检索 = 自己的全部知识 + 他人 `is_public=1` 的知识；
-  引用中标注来源是「我的知识」还是「共享知识」。知识库管理页只管理自己的知识。
+- ✅ 现状：`users`（无 `level`）、`knowledge_cards`（`raw_text` + `structured_json`）
+  已按 `user_id` 隔离；`llm_usage`、`transcripts` 不存在 → 🎯 M1/M2 直接改 schema。
+- **检索范围（本期）**：仅自己的知识。`is_public` 字段预留，跨用户共享检索延期。
 
 ### 资源节约策略
 
 | 资源 | 策略 | 状态 |
 |---|---|---|
 | 视频下载 | 按 `video_id` 落盘缓存（`VIDEO_CACHE_DIR`，全局共享），命中则跳过下载 | ✅ 已实现 |
-| 语音转写 | `transcripts` 表按 `(video_id, asr_model)` 缓存，跨用户复用，命中则跳过 ASR | 🎯 M1 |
-| LLM 调用 | `llm_usage` 每日计数 + 按 `users.level` 查限额表（代码内常量 dict），超限返回友好提示 | 🎯 M1 |
-| 结构化整理 | 同一视频转写结果整理后入库即缓存于卡片本身；重复收藏同一视频直接提示已存在 | ✅ 已实现 |
+| 语音转写 | `transcripts` 表按 `(video_id, asr_model)` 缓存，跨用户复用，命中则跳过 ASR | 🎯 M2 |
+| 链接提取限额 | `llm_usage.extract_calls` + 按 `users.level` 查限额；**对话不限额** | 🎯 M2 |
+| 重复收藏 | 同一用户同一 `video_id` 不重复入库 | ✅ 已实现 |
 
-限额默认值（可通过环境变量覆盖，保持简单，不做计费）：
+限额默认值（可通过 `DAILY_EXTRACT_LIMIT` 覆盖，不做计费）：
 
 ```python
-DAILY_LIMITS = {           # level -> {chat, extract}
-    0: {"chat": 20, "extract": 10},   # 普通用户
-    1: {"chat": 100, "extract": 50},  # 后期高级用户
+DAILY_EXTRACT_LIMITS = {   # level -> 每日链接提取次数
+    0: 10,   # 普通用户
+    1: 50,   # 后期高级用户
 }
 ```
 
@@ -224,8 +223,8 @@ DAILY_LIMITS = {           # level -> {chat, extract}
 | GET/PUT/POST | `/api/admin/prompts*` | 提示词调试（需 `X-Admin-Token`）|
 
 🎯 M1 契约变更：卡片对象由 `{raw_text, structured_json, steps}` 简化为
-`{id, title, content_md, stage, source_url, video_id, is_public, created_at}`；
-`/api/chat` 超限返回 `429 {"error": "今日对话次数已用完，明天再来吧"}`。
+`{id, title, content_md, stage, source_url, video_id, is_public, created_at}`。
+🎯 M2：链接提取超限返回 `429 {"error": "今日链接提取次数已用完，明天再来吧"}`；对话不限额。
 
 ## 6. 防幻觉策略（✅ 已实现，保持）
 
@@ -250,7 +249,7 @@ DAILY_LIMITS = {           # level -> {chat, extract}
 | `SESSION_SECRET` | — | HMAC 会话签名 |
 | `ALLOW_LOCAL_AUTH` | `0` | `1` 时允许 Web 本地登录 |
 | `ADMIN_TOKEN` / `PROMPTS_FILE` | — | 提示词调试 |
-| `DAILY_CHAT_LIMIT` / `DAILY_EXTRACT_LIMIT` | `20` / `10` | 🎯 M1：level 0 每日限额（覆盖默认值）|
+| `DAILY_EXTRACT_LIMIT` | `10` | 🎯 M2：level 0 每日链接提取限额（对话不限）|
 | `PORT` | `8080` | 服务端口 |
 
 ## 8. 不做的事情（红线）

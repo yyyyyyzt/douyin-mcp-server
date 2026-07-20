@@ -1,8 +1,10 @@
-"""文案 -> 结构化知识卡片。
+"""文案 -> Markdown 知识卡片。
 
-调用 LLM 把一段装修文案提炼为标题 + 正文的知识卡片。
+调用 LLM 把一段装修文案提炼为标题 + Markdown 正文。
 默认每次录入只生成一张卡片（一段视频 / 一次粘贴对应一条知识）。
 """
+
+from __future__ import annotations
 
 import json
 import re
@@ -35,7 +37,6 @@ def _strip_code_fences(text: str) -> str:
 
 
 def _extract_json_object(text: str) -> str:
-    """从文本中截取第一个完整的 JSON 对象（容忍前后噪声）。"""
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
@@ -85,36 +86,44 @@ def _as_str_list(value: Any) -> list[str]:
     return []
 
 
-def _format_steps(steps: Any) -> str:
+def _format_steps_md(steps: Any) -> str:
     if not steps or not isinstance(steps, list):
         return ""
     lines = []
     for i, step in enumerate(steps, 1):
+        if isinstance(step, str) and step.strip():
+            lines.append(f"{i}. {step.strip()}")
+            continue
         if not isinstance(step, dict):
             continue
         action = (step.get("action") or "").strip()
         detail = (step.get("detail") or "").strip()
         if action and detail:
-            lines.append(f"{i}. {action}：{detail}")
+            lines.append(f"{i}. **{action}**：{detail}")
         elif action:
-            lines.append(f"{i}. {action}")
+            lines.append(f"{i}. **{action}**")
     return "\n".join(lines)
 
 
-def _build_raw_text(card: dict, full_text: str) -> str:
-    """把结构化字段拼成可检索的正文（供 FTS 与展示）。"""
-    content = (
-        (card.get("content") or card.get("raw_excerpt") or card.get("raw_text") or "").strip()
-        or full_text
+def _build_content_md(card: dict, full_text: str) -> str:
+    """把 LLM 字段拼成 Markdown 正文。"""
+    # 优先直接使用 content_md / content
+    direct = (
+        card.get("content_md")
+        or card.get("content")
+        or card.get("raw_excerpt")
+        or card.get("raw_text")
+        or ""
     )
-    parts = [content]
-    stage = (card.get("stage") or "").strip()
-    if stage:
-        parts.insert(0, f"【阶段：{stage}】")
+    direct = str(direct).strip()
 
-    steps_text = _format_steps(card.get("steps"))
-    if steps_text:
-        parts.append("操作步骤：\n" + steps_text)
+    parts: list[str] = []
+    if direct:
+        parts.append(direct)
+
+    steps_md = _format_steps_md(card.get("steps"))
+    if steps_md and "操作步骤" not in direct and "步骤" not in direct[:80]:
+        parts.append("## 操作步骤\n\n" + steps_md)
 
     for label, key in (
         ("验收标准", "standards"),
@@ -122,60 +131,56 @@ def _build_raw_text(card: dict, full_text: str) -> str:
         ("材料工具", "materials"),
     ):
         items = _as_str_list(card.get(key))
-        if items:
-            parts.append(f"{label}：\n" + "\n".join(f"- {x}" for x in items))
+        if items and label not in direct:
+            bullet = "\n".join(f"- {x}" for x in items)
+            parts.append(f"## {label}\n\n{bullet}")
 
     tags = _as_str_list(card.get("tags"))
-    if tags:
+    if tags and "标签" not in direct:
         parts.append("标签：" + "、".join(tags))
 
-    return "\n\n".join(parts).strip() or full_text
+    body = "\n\n".join(parts).strip()
+    return body or full_text
 
 
 def _normalize_card(card: dict, full_text: str) -> dict:
     title = (card.get("title") or "").strip()
     stage = (card.get("stage") or "").strip() or None
-    raw_text = _build_raw_text(card, full_text)
-
-    structured: dict[str, Any] = {
-        "title": title,
-        "stage": stage or "",
-        "content": (card.get("content") or "").strip() or raw_text,
-        "steps": card.get("steps") if isinstance(card.get("steps"), list) else [],
-        "standards": _as_str_list(card.get("standards")),
-        "warnings": _as_str_list(card.get("warnings")),
-        "materials": _as_str_list(card.get("materials")),
-        "tags": _as_str_list(card.get("tags")),
-    }
-
+    content_md = _build_content_md(card, full_text)
     return {
         "title": title,
         "stage": stage,
-        "raw_text": raw_text,
-        "structured_json": json.dumps(structured, ensure_ascii=False),
+        "content_md": content_md,
     }
 
 
 def _merge_cards(cards: list[dict], full_text: str) -> dict:
-    """将多张卡片合并为一条（兜底）。"""
     if not cards:
         return _normalize_card({}, full_text)
     if len(cards) == 1:
         return _normalize_card(cards[0] if isinstance(cards[0], dict) else {}, full_text)
-    title = (cards[0].get("title") or "装修知识要点").strip() if isinstance(cards[0], dict) else "装修知识要点"
+    title = (
+        (cards[0].get("title") or "装修知识要点").strip()
+        if isinstance(cards[0], dict)
+        else "装修知识要点"
+    )
     parts = []
     for i, c in enumerate(cards, 1):
         if not isinstance(c, dict):
             continue
         t = (c.get("title") or f"要点{i}").strip()
-        body = (c.get("content") or c.get("raw_excerpt") or "").strip()
-        parts.append(f"{i}. {t}\n{body}" if body else f"{i}. {t}")
+        body = (
+            c.get("content_md") or c.get("content") or c.get("raw_excerpt") or ""
+        ).strip()
+        if body:
+            parts.append(f"## {i}. {t}\n\n{body}")
+        else:
+            parts.append(f"## {i}. {t}")
     merged = "\n\n".join(parts) or full_text
-    return _normalize_card({"title": title, "content": merged}, full_text)
+    return _normalize_card({"title": title, "content_md": merged}, full_text)
 
 
 def structure_text(raw_text: str, llm, max_retries: int = 2, hint_title: str = "") -> list[dict]:
-    """把文案结构化为知识卡片（默认只返回一张）。"""
     card = structure_text_single(raw_text, llm, max_retries=max_retries, hint_title=hint_title)
     return [card]
 
@@ -186,7 +191,6 @@ def structure_text_single(
     max_retries: int = 2,
     hint_title: str = "",
 ) -> dict:
-    """把文案结构化为单条知识卡片。"""
     if not raw_text or not raw_text.strip():
         raise ValueError("文案内容不能为空")
 
