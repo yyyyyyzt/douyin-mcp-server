@@ -1,4 +1,30 @@
-const { getToken, setToken, clearToken } = require('./token');
+/** 登录与 token（自包含，不依赖 request，避免循环依赖） */
+
+const TOKEN_KEY = 'auth_token';
+
+function getToken() {
+  try {
+    return wx.getStorageSync(TOKEN_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function setToken(token) {
+  try {
+    wx.setStorageSync(TOKEN_KEY, token || '');
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function clearToken() {
+  try {
+    wx.removeStorageSync(TOKEN_KEY);
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 function getBaseUrl() {
   const app = getApp();
@@ -48,6 +74,7 @@ async function ensureLogin() {
 }
 
 module.exports = {
+  TOKEN_KEY,
   getToken,
   setToken,
   clearToken,

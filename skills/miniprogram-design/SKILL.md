@@ -18,7 +18,7 @@ description: >-
 
 | 问题 | 原因 | 解法 |
 |---|---|---|
-| `authUtil.getToken is not a function` | `auth.js` ↔ `request.js` 循环依赖 | Token 存 `utils/token.js`；登录用 `wx.request` 直调，不经 `request.js` |
+| `authUtil.getToken is not a function` / `module 'utils/token.js' is not defined` | 循环依赖，或新建 utils 文件未被工具打包 | **不要**拆独立 `token.js`；token 读写内联在 `auth.js` / `request.js`；登录用 `wx.request` 直调 |
 | `tdesign.gtimg.com/.../t.woff ERR_CACHE_MISS` | 小程序无法稳定拉 CDN 字体 | 字体放 `assets/fonts/`，`scripts/build-npm.sh` 改写 `icon.wxss` |
 | 对话输入区「看不见」 | `100vh` / 未给 composer `flex-shrink:0` / 被 tabBar 挡住 | `.page-root` 用 `height:100%`；composer 在 flex 流底部；tabBar `placeholder` |
 | 设置页乱 | 滥用 `t-cell` note 折行 | 改成分组卡片 + radio 列表 |

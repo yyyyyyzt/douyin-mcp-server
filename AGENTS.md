@@ -11,6 +11,7 @@ startup update script already runs `uv sync`, so the `.venv` is present and depe
 - [`docs/DESIGN.md`](docs/DESIGN.md)：设计与契约（单一事实来源）。
 - [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md)：v2 改版任务分解与验收标准。
 - [`PROGRESS.md`](PROGRESS.md)：当前进度与开发规范。
+- [`skills/miniprogram-design/SKILL.md`](skills/miniprogram-design/SKILL.md)：小程序 UI 排障与布局约定（改 `miniprogram/` 前必读）。
 
 ### Environment notes
 - `~/.bashrc` auto-activates `/workspace/.venv` and adds `~/.local/bin` (uv) to `PATH`.
