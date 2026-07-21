@@ -1,87 +1,103 @@
 <view class="page-root">
   <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
   <block wx:if="{{!needLogin}}">
-  <view class="page-header">
-    <view>
-      <view class="page-title">知识库</view>
-      <view class="page-subtitle">像备忘录一样查看装修知识</view>
-    </view>
-    <view class="settings-entry" bindtap="goSettings">
-      <t-icon name="setting" size="44rpx" color="#6b7280" />
-    </view>
-  </view>
-
-  <t-search
-    value="{{search}}"
-    placeholder="搜防水、报价、验收..."
-    bind:change="onSearchChange"
-    bind:clear="onSearchClear"
-    class="kb-search"
-  />
-
-  <scroll-view class="stage-scroll" scroll-x enhanced show-scrollbar="{{false}}">
-    <view class="stage-row">
-      <t-tag
-        wx:for="{{stages}}"
-        wx:key="*this"
-        variant="{{stage === item ? 'dark' : 'light'}}"
-        theme="{{stage === item ? 'primary' : 'default'}}"
-        class="stage-tag"
-        data-stage="{{item}}"
-        bind:tap="onStageTap"
-      >{{item}}</t-tag>
-    </view>
-  </scroll-view>
-
-  <scroll-view class="scroll-body" scroll-y enhanced show-scrollbar="{{false}}">
-    <view wx:if="{{loading}}" class="loading-wrap">
-      <t-loading theme="circular" size="48rpx" />
+    <view class="page-header">
+      <view>
+        <view class="page-title">知识库</view>
+        <view class="page-subtitle">按标签浏览你收藏的装修知识</view>
+      </view>
+      <view class="settings-entry" bindtap="goSettings">设置</view>
     </view>
 
-    <t-empty
-      wx:elif="{{!filtered.length}}"
-      icon="info-circle-filled"
-      description="还没有知识，去收集第一个装修经验"
-    >
-      <t-button theme="primary" size="small" bind:tap="goCollect">去收集</t-button>
-    </t-empty>
+    <view class="search-wrap">
+      <input
+        class="search-input"
+        value="{{search}}"
+        placeholder="搜防水、报价、验收…"
+        confirm-type="search"
+        bindinput="onSearchChange"
+      />
+      <text wx:if="{{search}}" class="search-clear" bindtap="onSearchClear">清除</text>
+    </view>
 
-    <t-cell
-      wx:for="{{filtered}}"
-      wx:key="id"
-      title="{{item.title || '未命名'}}"
-      description="{{item.excerpt}}"
-      hover
-      arrow
-      data-id="{{item.id}}"
-      bind:click="openDetail"
-      class="card-cell"
-    />
-  </scroll-view>
+    <scroll-view class="stage-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="stage-row">
+        <view
+          wx:for="{{stageFilters}}"
+          wx:key="key"
+          class="stage-chip {{stage === item.key ? 'active' : ''}}"
+          data-stage="{{item.key}}"
+          bindtap="onStageTap"
+        >
+          <text>{{item.label}}</text>
+          <text class="chip-count">{{item.count}}</text>
+        </view>
+      </view>
+    </scroll-view>
 
-  <t-popup
-    visible="{{detailVisible}}"
-    placement="bottom"
-    bind:visible-change="onPopupVisibleChange"
-  >
-    <view class="detail-sheet">
-      <block wx:if="{{!editing}}">
-        <view class="detail-title">{{detail.title}}</view>
-        <scroll-view scroll-y class="detail-body" enhanced show-scrollbar="{{false}}">
-          <rich-text nodes="{{detailHtml}}" />
-        </scroll-view>
-        <view class="detail-actions">
-          <t-button theme="light" size="medium" bind:tap="toggleEdit">编辑</t-button>
-          <t-button theme="danger" variant="outline" size="medium" bind:tap="deleteDetail">删除</t-button>
-          <t-button theme="primary" size="medium" bind:tap="closeDetail">关闭</t-button>
+    <scroll-view class="scroll-body" scroll-y enhanced show-scrollbar="{{false}}">
+      <view wx:if="{{loading}}" class="loading-wrap">加载中…</view>
+
+      <view wx:elif="{{!sections.length}}" class="empty-box">
+        <view class="empty-title">还没有知识</view>
+        <view class="empty-desc">去收集页保存第一条装修经验</view>
+        <button class="empty-btn" bindtap="goCollect">去收集</button>
+      </view>
+
+      <block wx:else>
+        <view wx:for="{{sections}}" wx:key="key" class="section">
+          <view class="section-head">
+            <text class="section-title">{{item.label}}</text>
+            <text class="section-count">{{item.cards.length}} 条</text>
+          </view>
+          <view
+            wx:for="{{item.cards}}"
+            wx:for-item="card"
+            wx:key="id"
+            class="card-item"
+            data-id="{{card.id}}"
+            bindtap="openDetail"
+          >
+            <view class="card-title">{{card.title || '未命名'}}</view>
+            <view class="card-excerpt">{{card.excerpt}}</view>
+            <view class="card-meta">
+              <text class="card-tag">{{card.stageLabel}}</text>
+            </view>
+          </view>
         </view>
       </block>
-      <block wx:else>
-        <input class="detail-input" value="{{editTitle}}" bindinput="onEditTitle" placeholder="标题" />
-        <t-textarea value="{{editBody}}" bind:change="onEditBody" autosize="{{true}}" maxlength="-1" />
-        <t-button theme="primary" block bind:tap="saveDetail">保存</t-button>
-      </block>
+    </scroll-view>
+
+    <view wx:if="{{detailVisible}}" class="sheet-mask" bindtap="closeDetail">
+      <view class="detail-sheet" catchtap="noop">
+        <block wx:if="{{!editing}}">
+          <view class="detail-title">{{detail.title}}</view>
+          <view class="detail-stage">{{detail.stageLabel}}</view>
+          <scroll-view scroll-y class="detail-body" enhanced show-scrollbar="{{false}}">
+            <rich-text nodes="{{detailHtml}}" />
+          </scroll-view>
+          <view class="detail-actions">
+            <button class="sheet-btn ghost" bindtap="toggleEdit">编辑</button>
+            <button class="sheet-btn danger" bindtap="deleteDetail">删除</button>
+            <button class="sheet-btn primary" bindtap="closeDetail">关闭</button>
+          </view>
+        </block>
+        <block wx:else>
+          <input class="detail-input" value="{{editTitle}}" bindinput="onEditTitle" placeholder="标题" />
+          <picker mode="selector" range="{{stageOptions}}" value="{{editStageIndex}}" bindchange="onEditStage">
+            <view class="stage-picker">阶段标签：{{stageOptions[editStageIndex]}}</view>
+          </picker>
+          <textarea
+            class="detail-textarea"
+            value="{{editBody}}"
+            bindinput="onEditBody"
+            maxlength="-1"
+            auto-height
+            placeholder="Markdown 正文"
+          />
+          <button class="sheet-btn primary block" bindtap="saveDetail">保存</button>
+        </block>
+      </view>
     </view>
-  </t-popup>
   </block>
 </view>

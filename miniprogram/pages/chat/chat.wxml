@@ -1,75 +1,66 @@
 <view class="page-root chat-page">
   <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
   <block wx:if="{{!needLogin}}">
-  <view class="page-header">
-    <view>
-      <view class="page-title">AI 助手</view>
-      <view class="page-subtitle">基于你的装修知识对话问答</view>
+    <view class="chat-topbar">
+      <view class="chat-topbar-title">AI 助手</view>
+      <view class="chat-topbar-action" bindtap="goSettings">设置</view>
     </view>
-    <view class="settings-entry" bindtap="goSettings">
-      <t-icon name="setting" size="44rpx" color="#6b7280" />
-    </view>
-  </view>
 
-  <scroll-view
-    class="scroll-body chat-scroll"
-    scroll-y
-    enhanced
-    show-scrollbar="{{false}}"
-    scroll-into-view="{{scrollIntoView}}"
-    scroll-with-animation
-  >
-    <view wx:if="{{!messages.length}}" class="scenario-panel">
-      <view class="scenario-hint">试试这些对话场景：</view>
-      <view class="scenario-list">
-        <view
-          wx:for="{{scenarios}}"
-          wx:key="id"
-          class="scenario-item {{item.enabled ? '' : 'disabled'}}"
-          data-id="{{item.id}}"
-          bindtap="onScenarioTap"
-        >
-          <text>{{item.label}}</text>
-          <t-tag wx:if="{{item.badge}}" size="small" variant="outline">{{item.badge}}</t-tag>
+    <scroll-view
+      class="scroll-body chat-scroll"
+      scroll-y
+      enhanced
+      show-scrollbar="{{false}}"
+      scroll-into-view="{{scrollIntoView}}"
+      scroll-with-animation
+    >
+      <view wx:if="{{!messages.length}}" class="welcome">
+        <view class="welcome-brand">自装助手</view>
+        <view class="welcome-text">基于你收藏的装修知识回答，有依据才敢用。</view>
+        <view class="chip-row">
+          <view
+            wx:for="{{scenarios}}"
+            wx:key="id"
+            class="chip {{item.enabled ? '' : 'chip-disabled'}}"
+            data-id="{{item.id}}"
+            bindtap="onScenarioTap"
+          >{{item.label}}</view>
         </view>
       </view>
-    </view>
 
-    <block wx:for="{{messages}}" wx:key="id">
-      <chat-message message="{{item}}" />
-    </block>
-    <view id="chat-bottom" class="scroll-anchor"></view>
-  </scroll-view>
+      <block wx:for="{{messages}}" wx:key="id">
+        <chat-message message="{{item}}" />
+      </block>
+      <view id="chat-bottom" class="scroll-anchor"></view>
+    </scroll-view>
 
-  <view class="composer-bar">
-    <view wx:if="{{attachment}}" class="attachment-bar">
-      <t-tag theme="primary" variant="light">
-        {{attachment.filename}}
-      </t-tag>
-      <text class="clear-attach" bindtap="clearAttachment">移除</text>
-    </view>
-    <view class="composer-row">
-      <view class="attach-btn" bindtap="chooseFile">
-        <t-icon name="attach" size="44rpx" color="#6b7280" />
+    <view class="composer-shell">
+      <view wx:if="{{attachment}}" class="attachment-bar">
+        <text class="attach-name">{{attachment.filename}}</text>
+        <text class="clear-attach" bindtap="clearAttachment">移除</text>
       </view>
-      <input
-        class="composer-input"
-        value="{{input}}"
-        placeholder="输入你的装修问题"
-        confirm-type="send"
-        adjust-position="{{true}}"
-        cursor-spacing="24"
-        bindinput="onInput"
-        bindconfirm="onSendConfirm"
-      />
-      <t-button
-        theme="primary"
-        size="small"
-        loading="{{loading}}"
-        disabled="{{loading}}"
-        bind:tap="send"
-      >发送</t-button>
+      <view class="composer-box">
+        <view class="attach-btn" bindtap="chooseFile">＋</view>
+        <textarea
+          class="composer-input"
+          value="{{input}}"
+          placeholder="问点装修相关的…"
+          auto-height
+          maxlength="-1"
+          confirm-type="send"
+          adjust-position="{{true}}"
+          show-confirm-bar="{{false}}"
+          cursor-spacing="48"
+          bindinput="onInput"
+          bindconfirm="onSendConfirm"
+        />
+        <button
+          class="send-btn {{canSend ? 'ready' : ''}}"
+          bindtap="send"
+          disabled="{{!canSend || loading}}"
+          loading="{{loading}}"
+        >发送</button>
+      </view>
     </view>
-  </view>
   </block>
 </view>

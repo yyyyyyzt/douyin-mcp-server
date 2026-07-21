@@ -1,7 +1,6 @@
 {
   "component": true,
   "usingComponents": {
-    "t-tag": "tdesign-miniprogram/tag/tag",
     "t-loading": "tdesign-miniprogram/loading/loading"
   }
 }

@@ -1,8 +1,8 @@
-const authUtil = require('./auth');
+const { getToken, clearToken } = require('./token');
 
 function getBaseUrl() {
   const app = getApp();
-  return (app && app.globalData.apiBase) || '';
+  return (app && app.globalData && app.globalData.apiBase) || '';
 }
 
 function markNeedLogin() {
@@ -17,7 +17,7 @@ function request({ url, method = 'GET', data, header = {}, needAuth = true }) {
   const base = getBaseUrl();
   const headers = { 'Content-Type': 'application/json', ...header };
   if (needAuth) {
-    const token = authUtil.getToken();
+    const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
   return new Promise((resolve, reject) => {
@@ -28,7 +28,7 @@ function request({ url, method = 'GET', data, header = {}, needAuth = true }) {
       header: headers,
       success: (res) => {
         if (res.statusCode === 401 && needAuth) {
-          authUtil.clearToken();
+          clearToken();
           markNeedLogin();
           reject(new Error('请先登录'));
           return;
@@ -44,14 +44,16 @@ function request({ url, method = 'GET', data, header = {}, needAuth = true }) {
         }
         resolve(res.data);
       },
-      fail: reject,
+      fail: (err) => {
+        reject(new Error((err && err.errMsg) || '网络错误'));
+      },
     });
   });
 }
 
 function uploadFile({ url, filePath, name = 'file', formData = {} }) {
   const base = getBaseUrl();
-  const token = authUtil.getToken();
+  const token = getToken();
   return new Promise((resolve, reject) => {
     wx.uploadFile({
       url: base + url,
@@ -68,7 +70,7 @@ function uploadFile({ url, filePath, name = 'file', formData = {} }) {
           return;
         }
         if (res.statusCode === 401) {
-          authUtil.clearToken();
+          clearToken();
           markNeedLogin();
           reject(new Error('请先登录'));
           return;
@@ -79,7 +81,9 @@ function uploadFile({ url, filePath, name = 'file', formData = {} }) {
         }
         resolve(data);
       },
-      fail: reject,
+      fail: (err) => {
+        reject(new Error((err && err.errMsg) || '上传失败'));
+      },
     });
   });
 }

@@ -1,54 +1,49 @@
 <view class="page-root">
   <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
   <block wx:if="{{!needLogin}}">
-  <view class="page-header">
-    <view>
-      <view class="page-title">收集</view>
-      <view class="page-subtitle">把刷到的装修经验存成自己的知识</view>
-    </view>
-    <view class="settings-entry" bindtap="goSettings">
-      <t-icon name="setting" size="44rpx" color="#6b7280" />
-    </view>
-  </view>
-
-  <scroll-view class="scroll-body" scroll-y enhanced show-scrollbar="{{false}}">
-    <t-textarea
-      value="{{input}}"
-      placeholder="粘贴抖音分享链接或装修笔记"
-      maxlength="-1"
-      autosize="{{true}}"
-      disableDefaultPadding="{{true}}"
-      bind:change="onInput"
-      t-class="collect-textarea"
-    />
-
-    <view class="actions">
-      <t-button theme="light" variant="outline" size="small" bind:tap="pasteClipboard">粘贴</t-button>
+    <view class="page-header">
+      <view>
+        <view class="page-title">收集</view>
+        <view class="page-subtitle">把刷到的装修经验存成自己的知识</view>
+      </view>
+      <view class="settings-entry" bindtap="goSettings" aria-role="button">设置</view>
     </view>
 
-    <t-button
-      theme="primary"
-      size="large"
-      block
-      loading="{{busy}}"
-      disabled="{{busy}}"
-      bind:tap="onSave"
-    >保存到知识库</t-button>
+    <scroll-view class="scroll-body" scroll-y enhanced show-scrollbar="{{false}}">
+      <view class="input-card">
+        <t-textarea
+          value="{{input}}"
+          placeholder="粘贴抖音分享链接，或直接写一段装修笔记"
+          maxlength="-1"
+          autosize="{{ { minHeight: 160, maxHeight: 360 } }}"
+          disableDefaultPadding="{{true}}"
+          bind:change="onInput"
+          t-class="collect-textarea"
+        />
+      </view>
 
-    <view wx:if="{{busy}}" class="progress-block">
-      <text class="progress-label">{{stepLabel}}</text>
-      <t-progress percentage="{{progress}}" stroke-width="8" color="#FF6B4A" />
-    </view>
+      <view class="action-row">
+        <button class="btn-secondary" bindtap="pasteClipboard" disabled="{{busy}}">粘贴</button>
+        <button
+          class="btn-primary"
+          bindtap="onSave"
+          loading="{{busy}}"
+          disabled="{{busy || !input}}"
+        >保存到自己的知识库</button>
+      </view>
 
-    <view wx:if="{{error}}" class="error-text">{{error}}</view>
+      <view wx:if="{{busy}}" class="progress-block">
+        <text class="progress-label">{{stepLabel}}</text>
+        <t-progress percentage="{{progress}}" stroke-width="8" color="#FF6B4A" />
+      </view>
 
-    <t-cell
-      wx:if="{{lastCard}}"
-      title="{{lastCard.title || '未命名'}}"
-      description="{{lastCard.excerpt}}"
-      hover
-      class="preview-cell"
-    />
-  </scroll-view>
+      <view wx:if="{{error}}" class="error-text">{{error}}</view>
+
+      <view wx:if="{{lastCard}}" class="preview-card" bindtap="goKnowledge">
+        <view class="preview-label">已保存</view>
+        <view class="preview-title">{{lastCard.title || '未命名'}}</view>
+        <view class="preview-excerpt">{{lastCard.excerpt}}</view>
+      </view>
+    </scroll-view>
   </block>
 </view>

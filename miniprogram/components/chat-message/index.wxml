@@ -1,17 +1,9 @@
 <view class="chat-message {{message.role}}">
-  <!-- 用户消息 -->
   <view wx:if="{{message.role === 'user'}}" class="bubble user-bubble">
-    <t-tag
-      wx:if="{{message.attachment}}"
-      size="small"
-      variant="light"
-      theme="primary"
-      class="attach-tag"
-    >{{attachmentText}}</t-tag>
+    <view wx:if="{{message.attachment}}" class="badge badge-doc" style="margin-bottom:12rpx">附件</view>
     <text class="content" user-select>{{message.content}}</text>
   </view>
 
-  <!-- 助手消息 -->
   <view wx:else class="bubble assistant-bubble">
     <view wx:if="{{message.pending}}" class="pending">
       <t-loading theme="circular" size="40rpx" />
@@ -19,29 +11,15 @@
     </view>
 
     <block wx:elif="{{message.kind === 'expense_log' || message.kind === 'budget_guard' || message.kind === 'progress_track'}}">
-      <t-tag size="small" variant="outline" theme="default">即将上线</t-tag>
+      <view class="badge" style="margin-bottom:12rpx">即将上线</view>
       <text class="content">{{message.content}}</text>
     </block>
 
     <block wx:else>
       <view class="meta-row">
-        <t-tag
-          wx:if="{{message.grounded && !message.error}}"
-          size="small"
-          theme="success"
-          variant="light"
-        >来自你的知识库</t-tag>
-        <t-tag
-          wx:elif="{{!message.error}}"
-          size="small"
-          theme="warning"
-          variant="light"
-        >没找到你的知识依据，仅供参考</t-tag>
-        <t-tag
-          wx:if="{{message.hasDocument}}"
-          size="small"
-          variant="light"
-        >已结合报价单</t-tag>
+        <view wx:if="{{message.grounded && !message.error}}" class="badge badge-ok">来自你的知识库</view>
+        <view wx:elif="{{!message.error}}" class="badge badge-warn">没找到你的知识依据</view>
+        <view wx:if="{{message.hasDocument}}" class="badge badge-doc">已结合报价单</view>
       </view>
       <text class="content" user-select>{{message.content}}</text>
       <view

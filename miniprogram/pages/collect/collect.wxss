@@ -1,12 +1,55 @@
-.collect-textarea {
+.input-card {
   background: #fff;
   border-radius: 24rpx;
-  padding: 16rpx;
+  padding: 8rpx 12rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.collect-textarea {
+  background: transparent;
   min-height: 200rpx;
 }
 
-.actions {
-  margin: 16rpx 0 24rpx;
+.action-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+  align-items: stretch;
+}
+
+.btn-secondary,
+.btn-primary {
+  margin: 0;
+  border: none;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+  line-height: 1.2;
+  padding: 28rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.btn-secondary {
+  flex: 0 0 160rpx;
+  background: #fff;
+  color: #374151;
+  border: 2rpx solid #e5e7eb;
+}
+
+.btn-primary {
+  flex: 1;
+  background: #ff6b4a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-primary[disabled],
+.btn-secondary[disabled] {
+  opacity: 0.55;
+}
+
+.btn-secondary::after,
+.btn-primary::after {
+  border: none;
 }
 
 .progress-block {
@@ -27,8 +70,35 @@
   line-height: 1.5;
 }
 
-.preview-cell {
+.preview-card {
   margin-top: 32rpx;
+  background: #fff;
   border-radius: 24rpx;
-  overflow: hidden;
+  padding: 28rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.preview-label {
+  font-size: 22rpx;
+  color: #059669;
+  margin-bottom: 8rpx;
+}
+
+.preview-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.preview-excerpt {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.settings-entry {
+  font-size: 26rpx;
+  color: #6b7280;
+  padding: 12rpx 8rpx;
 }
