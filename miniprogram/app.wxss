@@ -15,7 +15,8 @@ page {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 24rpx 32rpx 0;
+  /* 自定义 tabBar 为 fixed 悬浮层，页面需预留高度避免遮挡底部输入/内容 */
+  padding: 24rpx 32rpx calc(112rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 

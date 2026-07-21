@@ -1,17 +1,13 @@
-<t-tab-bar
-  value="{{value}}"
-  bind:change="onChange"
-  fixed="{{true}}"
-  safe-area-inset-bottom="{{true}}"
-  placeholder="{{true}}"
-  split="{{true}}"
-  theme="tag"
-  t-class="app-tab-bar"
->
-  <t-tab-bar-item
+<!-- 原生自定义 tabBar：不用 TDesign 图标字体，避免字体加载失败 -->
+<view class="tab-bar">
+  <view
     wx:for="{{list}}"
     wx:key="value"
-    value="{{item.value}}"
-    icon="{{item.icon}}"
-  >{{item.text}}</t-tab-bar-item>
-</t-tab-bar>
+    class="tab-item {{value === item.value ? 'active' : ''}}"
+    data-value="{{item.value}}"
+    bindtap="onTap"
+  >
+    <view class="tab-glyph">{{item.glyph}}</view>
+    <view class="tab-text">{{item.text}}</view>
+  </view>
+</view>

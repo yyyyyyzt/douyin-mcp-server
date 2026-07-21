@@ -141,3 +141,94 @@ def test_fts_index_removed_after_delete(conn, uid):
     card_id = db.insert_card(conn, uid, **_sample(title="冷热水管", content_md="冷热水管走顶规范说明"))
     db.delete_card(conn, card_id, uid)
     assert db.search_cards(conn, "冷热水管走顶", uid, top_k=5) == []
+
+
+def test_migrate_legacy_raw_text_schema(tmp_path):
+    """生产旧库只有 raw_text 时，init_db 应迁到 content_md 且可插入/检索。"""
+    path = str(tmp_path / "legacy.db")
+    c = sqlite3.connect(path)
+    c.row_factory = sqlite3.Row
+    c.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            openid TEXT NOT NULL UNIQUE,
+            unionid TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login_at TIMESTAMP
+        );
+        CREATE TABLE knowledge_cards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            stage TEXT,
+            title TEXT,
+            raw_text TEXT NOT NULL,
+            structured_json TEXT,
+            source_type TEXT DEFAULT 'manual',
+            source_url TEXT,
+            video_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, video_id)
+        );
+        CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+            title, raw_text,
+            content='knowledge_cards', content_rowid='id', tokenize='trigram'
+        );
+        INSERT INTO users (openid) VALUES ('legacy-user');
+        INSERT INTO knowledge_cards (user_id, stage, title, raw_text, video_id)
+        VALUES (1, '水电改造', '旧卡片', '冷热水管要走顶避开承重墙', 'vid-old');
+        INSERT INTO knowledge_fts(rowid, title, raw_text)
+        SELECT id, title, raw_text FROM knowledge_cards;
+        """
+    )
+    c.commit()
+    c.close()
+
+    conn = db.connect(path)
+    db.init_db(conn)
+
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(knowledge_cards)")}
+    assert "content_md" in cols
+    assert "raw_text" not in cols
+    assert "is_public" in cols
+    assert "level" in {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+
+    got = db.get_card(conn, 1, 1)
+    assert got is not None
+    assert "承重墙" in got["content_md"]
+    assert got["title"] == "旧卡片"
+
+    hits = db.search_cards(conn, "冷热水管", 1, top_k=5)
+    assert len(hits) >= 1
+
+    new_id = db.insert_card(
+        conn, 1, title="新卡", content_md="泥木基层处理要点说明文字", stage="泥木"
+    )
+    assert new_id > 0
+    assert db.get_card(conn, new_id, 1)["content_md"].startswith("泥木")
+    conn.close()
+
+
+def test_migrate_adds_user_level_on_existing_db(tmp_path):
+    path = str(tmp_path / "users.db")
+    c = sqlite3.connect(path)
+    c.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            openid TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO users (openid) VALUES ('u1');
+        """
+    )
+    c.commit()
+    c.close()
+
+    conn = db.connect(path)
+    db.init_db(conn)
+    row = conn.execute("SELECT level FROM users WHERE openid='u1'").fetchone()
+    assert row is not None
+    assert int(row["level"]) == 0
+    conn.close()

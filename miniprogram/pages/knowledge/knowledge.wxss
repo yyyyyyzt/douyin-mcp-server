@@ -168,6 +168,7 @@
   background: #fff;
   border-radius: 32rpx 32rpx 0 0;
   padding: 32rpx;
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

@@ -1,15 +1,18 @@
 """SQLite + FTS5 知识卡片存储与检索（按 user_id 隔离）。
 
-Schema（无历史迁移）：
+Schema：
 - users：openid + level（提取限额用）
 - knowledge_cards：content_md 为唯一正文，默认私有 is_public=0
 - knowledge_fts：title + content_md（trigram）
 - llm_usage：每日链接提取计数
 - transcripts：转写共享缓存 (video_id, asr_model)
+
+init_db 会对旧库做就地迁移（raw_text → content_md 等）。
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date
 from typing import Any, Optional
@@ -100,8 +103,182 @@ def connect(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def _table_names(conn: sqlite3.Connection) -> set[str]:
+    return {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
+        )
+    }
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _content_md_from_legacy_row(row: sqlite3.Row) -> str:
+    """从旧版 raw_text / structured_json 拼出 Markdown 正文。"""
+    keys = set(row.keys())
+    raw = (row["raw_text"] if "raw_text" in keys else "") or ""
+    raw = str(raw).strip()
+    structured = row["structured_json"] if "structured_json" in keys else None
+    if not structured:
+        return raw
+    try:
+        data = json.loads(structured) if isinstance(structured, str) else structured
+    except (TypeError, json.JSONDecodeError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    parts: list[str] = []
+    summary = (data.get("summary") or "").strip()
+    if summary:
+        parts.append(summary)
+    steps = data.get("steps") or data.get("points") or []
+    if isinstance(steps, list) and steps:
+        for i, step in enumerate(steps, 1):
+            if isinstance(step, dict):
+                text = (step.get("text") or step.get("content") or step.get("title") or "").strip()
+            else:
+                text = str(step).strip()
+            if text:
+                parts.append(f"{i}. {text}")
+    body = "\n\n".join(parts).strip()
+    return body or raw
+
+
+def _migrate_knowledge_cards_to_content_md(conn: sqlite3.Connection) -> None:
+    """将 knowledge_cards(raw_text/structured_json) 迁到 content_md，并重建 FTS。"""
+    conn.executescript(
+        """
+        DROP TRIGGER IF EXISTS knowledge_cards_ai;
+        DROP TRIGGER IF EXISTS knowledge_cards_ad;
+        DROP TRIGGER IF EXISTS knowledge_cards_au;
+        DROP TABLE IF EXISTS knowledge_fts;
+        """
+    )
+
+    cols = _table_columns(conn, "knowledge_cards")
+    old_rows = conn.execute("SELECT * FROM knowledge_cards").fetchall()
+
+    conn.execute(
+        """
+        CREATE TABLE knowledge_cards_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            title TEXT NOT NULL DEFAULT '',
+            content_md TEXT NOT NULL,
+            stage TEXT,
+            source_type TEXT DEFAULT 'manual',
+            source_url TEXT,
+            video_id TEXT,
+            is_public INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, video_id)
+        )
+        """
+    )
+
+    for row in old_rows:
+        keys = set(row.keys())
+        content_md = (
+            _content_md_from_legacy_row(row)
+            if "raw_text" in keys or "structured_json" in keys
+            else ""
+        )
+        is_public = int(row["is_public"]) if "is_public" in keys and row["is_public"] is not None else 0
+        conn.execute(
+            """
+            INSERT INTO knowledge_cards_new (
+                id, user_id, title, content_md, stage, source_type, source_url,
+                video_id, is_public, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["id"],
+                row["user_id"],
+                (row["title"] if "title" in keys and row["title"] is not None else "") or "",
+                content_md or "",
+                row["stage"] if "stage" in keys else None,
+                (row["source_type"] if "source_type" in keys else None) or "manual",
+                row["source_url"] if "source_url" in keys else None,
+                row["video_id"] if "video_id" in keys else None,
+                is_public,
+                row["created_at"] if "created_at" in keys else None,
+                row["updated_at"] if "updated_at" in keys else None,
+            ),
+        )
+
+    conn.executescript(
+        """
+        DROP TABLE knowledge_cards;
+        ALTER TABLE knowledge_cards_new RENAME TO knowledge_cards;
+
+        CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+            title,
+            content_md,
+            content='knowledge_cards',
+            content_rowid='id',
+            tokenize='trigram'
+        );
+
+        CREATE TRIGGER knowledge_cards_ai AFTER INSERT ON knowledge_cards BEGIN
+            INSERT INTO knowledge_fts(rowid, title, content_md)
+            VALUES (new.id, new.title, new.content_md);
+        END;
+
+        CREATE TRIGGER knowledge_cards_ad AFTER DELETE ON knowledge_cards BEGIN
+            INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content_md)
+            VALUES ('delete', old.id, old.title, old.content_md);
+        END;
+
+        CREATE TRIGGER knowledge_cards_au AFTER UPDATE ON knowledge_cards BEGIN
+            INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content_md)
+            VALUES ('delete', old.id, old.title, old.content_md);
+            INSERT INTO knowledge_fts(rowid, title, content_md)
+            VALUES (new.id, new.title, new.content_md);
+        END;
+
+        INSERT INTO knowledge_fts(rowid, title, content_md)
+        SELECT id, title, content_md FROM knowledge_cards;
+        """
+    )
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    if column not in _table_columns(conn, table):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """兼容生产旧库：补列、raw_text→content_md、确保 llm_usage/transcripts。"""
+    tables = _table_names(conn)
+
+    if "users" in tables:
+        _ensure_column(conn, "users", "level", "level INTEGER NOT NULL DEFAULT 0")
+
+    if "knowledge_cards" in tables:
+        cols = _table_columns(conn, "knowledge_cards")
+        if "content_md" not in cols:
+            _migrate_knowledge_cards_to_content_md(conn)
+        else:
+            _ensure_column(
+                conn, "knowledge_cards", "is_public", "is_public INTEGER NOT NULL DEFAULT 0"
+            )
+
+    # CREATE IF NOT EXISTS 已在 _SCHEMA；这里再确保 llm_usage 有 extract_calls
+    if "llm_usage" in _table_names(conn):
+        usage_cols = _table_columns(conn, "llm_usage")
+        if "extract_calls" not in usage_cols:
+            conn.execute(
+                "ALTER TABLE llm_usage ADD COLUMN extract_calls INTEGER NOT NULL DEFAULT 0"
+            )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
+    _migrate_schema(conn)
     conn.commit()
 
 

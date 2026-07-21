@@ -71,7 +71,8 @@
 
 .composer-shell {
   flex-shrink: 0;
-  padding: 12rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  /* 安全区与 tabBar 高度已由 .page-root padding-bottom 预留 */
+  padding: 12rpx 24rpx 16rpx;
   background: #f7f4f1;
   border-top: 1rpx solid rgba(15, 23, 42, 0.06);
 }
