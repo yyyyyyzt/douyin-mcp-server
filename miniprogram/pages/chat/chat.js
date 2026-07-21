@@ -1,6 +1,7 @@
 const { request, uploadFile } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
 const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
+const { getSelectedModels } = require('../../utils/models');
 const {
   SCENARIO_KINDS,
   ATTACHMENT_KINDS,
@@ -16,6 +17,7 @@ Page({
     needLogin: false,
     messages: [],
     input: '',
+    canSend: false,
     loading: false,
     scenarios: QUICK_SCENARIOS,
     attachment: null,
@@ -37,7 +39,8 @@ Page({
   },
 
   onInput(e) {
-    this.setData({ input: e.detail.value });
+    const input = e.detail.value || '';
+    this.setData({ input, canSend: !!input.trim() && !this.data.loading });
   },
 
   onSendConfirm() {
@@ -54,6 +57,7 @@ Page({
     }
     this.setData({
       input: scenario.prompt,
+      canSend: true,
       activeScenarioKind: scenario.kind,
     });
     if (scenario.attachmentKind === ATTACHMENT_KINDS.DOCUMENT && !this.data.attachment) {
@@ -130,6 +134,7 @@ Page({
     this.setData({
       messages,
       input: '',
+      canSend: false,
       loading: true,
       attachment: null,
       activeScenarioKind: SCENARIO_KINDS.KNOWLEDGE_QA,
@@ -137,7 +142,10 @@ Page({
     this.scrollToBottom();
 
     try {
-      const body = buildChatRequestBody(userMsg, userMsg.attachment);
+      const body = {
+        ...buildChatRequestBody(userMsg, userMsg.attachment),
+        ...getSelectedModels(),
+      };
       const d = await request({ url: '/api/chat', method: 'POST', data: body });
       messages[idx] = {
         ...assistantMsg,
@@ -157,6 +165,7 @@ Page({
         grounded: false,
       };
       this.setData({ messages });
+      refreshLoginState(this);
     } finally {
       this.setData({ loading: false });
       this.scrollToBottom();

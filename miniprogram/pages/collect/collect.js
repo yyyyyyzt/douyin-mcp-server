@@ -2,6 +2,7 @@ const { request } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
 const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
 const { mdExcerpt } = require('../../utils/markdown');
+const { getSelectedModels } = require('../../utils/models');
 
 Page({
   data: {
@@ -39,6 +40,10 @@ Page({
 
   goSettings() {
     wx.navigateTo({ url: '/pages/settings/settings' });
+  },
+
+  goKnowledge() {
+    wx.switchTab({ url: '/pages/knowledge/knowledge' });
   },
 
   isLikelyLink(text) {
@@ -83,10 +88,11 @@ Page({
   },
 
   async extractAndSave(url) {
+    const models = getSelectedModels();
     const start = await request({
       url: '/api/video/extract',
       method: 'POST',
-      data: { url },
+      data: { url, ...models },
     });
     const preview = await this.pollExtract(start.task_id);
     this.setData({ step: 1, progress: 75, stepLabel: this.data.steps[1] });
@@ -149,10 +155,11 @@ Page({
   },
 
   async structureAndSave(text) {
+    const models = getSelectedModels();
     const d = await request({
       url: '/api/cards/structure',
       method: 'POST',
-      data: { text },
+      data: { text, llm_model: models.llm_model },
     });
     this.setData({
       step: 1,

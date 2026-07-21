@@ -1,8 +1,63 @@
 <view class="settings-page">
-  <t-cell-group theme="card">
-    <t-cell title="API 地址" note="{{apiBase}}" />
-    <t-cell title="模型与密钥" note="在服务端 .env 配置，小程序不保存密钥" />
-    <t-cell title="对话能力" note="当前：知识问答、报价单；记账/预算/进度即将上线" />
-  </t-cell-group>
-  <view class="hint">本地调试请在微信开发者工具勾选「不校验合法域名」，并修改 app.js 中的 API 地址。</view>
+  <view class="hero">
+    <view class="hero-title">高级设置</view>
+    <view class="hero-desc">模型与服务状态。密钥只在服务端配置，小程序不保存密钥。</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">服务连接</view>
+    <view class="row">
+      <text class="label">API 地址</text>
+      <text class="value mono">{{apiBase}}</text>
+    </view>
+    <view class="row">
+      <text class="label">服务状态</text>
+      <text class="value {{serverOk ? 'ok' : 'bad'}}">{{serverStatus}}</text>
+    </view>
+    <button class="action" bindtap="refreshStatus" loading="{{checking}}">重新检测</button>
+  </view>
+
+  <view class="card">
+    <view class="card-title">对话模型</view>
+    <view class="hint">用于知识整理与 AI 助手回答</view>
+    <radio-group bindchange="onLlmChange">
+      <label
+        wx:for="{{llmModels}}"
+        wx:key="id"
+        class="option {{llmModel === item.id ? 'selected' : ''}}"
+      >
+        <radio value="{{item.id}}" checked="{{llmModel === item.id}}" color="#ff6b4a" />
+        <view class="option-body">
+          <view class="option-name">{{item.name}}</view>
+          <view class="option-desc">{{item.description}}</view>
+        </view>
+      </label>
+    </radio-group>
+  </view>
+
+  <view class="card">
+    <view class="card-title">语音识别模型</view>
+    <view class="hint">用于读取短视频文案</view>
+    <radio-group bindchange="onAsrChange">
+      <label
+        wx:for="{{asrModels}}"
+        wx:key="id"
+        class="option {{asrModel === item.id ? 'selected' : ''}}"
+      >
+        <radio value="{{item.id}}" checked="{{asrModel === item.id}}" color="#ff6b4a" />
+        <view class="option-body">
+          <view class="option-name">{{item.name}}</view>
+          <view class="option-desc">{{item.description}}</view>
+        </view>
+      </label>
+    </radio-group>
+  </view>
+
+  <view class="card">
+    <view class="card-title">说明</view>
+    <view class="note">本地调试：开发者工具勾选「不校验合法域名」，并在 app.js 修改 API 地址。</view>
+    <view class="note">密钥配置在服务端 `.env`，不要写进小程序代码。</view>
+  </view>
+
+  <button class="reset" bindtap="resetModels">恢复默认模型</button>
 </view>

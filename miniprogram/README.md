@@ -47,6 +47,7 @@ npm run build:npm
 
 ## 5. UI 说明
 
-- [TDesign 小程序](https://tdesign.tencent.com/miniprogram/getting-started) + 自定义 `custom-tab-bar`
-- 对话场景：`utils/chat-scenarios.js`
-- 设计与 UI 约定：[`../docs/DESIGN.md`](../docs/DESIGN.md)；改版计划：[`../docs/DEV_PLAN.md`](../docs/DEV_PLAN.md)
+- 对话为默认首页；输入区固定在底部（类通用 AI 对话）
+- 图标字体本地化：`assets/fonts/`（`npm run build:npm` 会改写 TDesign CDN）
+- 设计约定：[`../skills/miniprogram-design/SKILL.md`](../skills/miniprogram-design/SKILL.md)
+- 设计与计划：[`../docs/DESIGN.md`](../docs/DESIGN.md)、[`../docs/DEV_PLAN.md`](../docs/DEV_PLAN.md)

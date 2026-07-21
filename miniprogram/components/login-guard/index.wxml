@@ -2,12 +2,6 @@
   <view class="brand">自装助手</view>
   <view class="headline">把装修知识变成你的对话助手</view>
   <view class="desc">收藏短视频里的经验，提问时严格依据你的知识回答</view>
-  <t-button
-    theme="primary"
-    size="large"
-    block
-    loading="{{loading}}"
-    bind:tap="onLogin"
-  >微信一键登录</t-button>
+  <button class="login-btn" loading="{{loading}}" bindtap="onLogin">微信一键登录</button>
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>

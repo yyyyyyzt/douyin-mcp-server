@@ -1,5 +1,5 @@
 .chat-message {
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
   display: flex;
 }
 
@@ -8,19 +8,25 @@
 }
 
 .bubble {
-  max-width: 88%;
-  padding: 20rpx 24rpx;
-  border-radius: 24rpx;
+  max-width: 86%;
+  padding: 22rpx 26rpx;
+  border-radius: 28rpx;
   box-sizing: border-box;
 }
 
 .user-bubble {
-  background: #ffede8;
+  background: #ff6b4a;
+  border-bottom-right-radius: 8rpx;
+}
+
+.user-bubble .content {
+  color: #fff;
 }
 
 .assistant-bubble {
   background: #ffffff;
-  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.06);
+  border-bottom-left-radius: 8rpx;
+  box-shadow: 0 4rpx 20rpx rgba(15, 23, 42, 0.05);
 }
 
 .attach-tag {
@@ -30,8 +36,9 @@
 .content {
   display: block;
   white-space: pre-wrap;
-  line-height: 1.6;
+  line-height: 1.65;
   color: #1f2937;
+  font-size: 28rpx;
 }
 
 .meta-row {
@@ -39,6 +46,29 @@
   flex-wrap: wrap;
   gap: 8rpx;
   margin-bottom: 12rpx;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+
+.badge-ok {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.badge-warn {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.badge-doc {
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .pending {

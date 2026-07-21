@@ -37,3 +37,19 @@
   color: #d97706;
   font-size: 26rpx;
 }
+
+.login-btn {
+  margin: 0;
+  background: #ff6b4a;
+  color: #fff;
+  border-radius: 20rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 96rpx;
+  height: 96rpx;
+  border: none;
+}
+
+.login-btn::after {
+  border: none;
+}
