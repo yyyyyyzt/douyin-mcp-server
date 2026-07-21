@@ -1,4 +1,22 @@
-const { getToken, clearToken } = require('./token');
+/** HTTP 封装：token 直接读本地存储，不 require auth（避免循环依赖） */
+
+const TOKEN_KEY = 'auth_token';
+
+function getToken() {
+  try {
+    return wx.getStorageSync(TOKEN_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function clearToken() {
+  try {
+    wx.removeStorageSync(TOKEN_KEY);
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 function getBaseUrl() {
   const app = getApp();
