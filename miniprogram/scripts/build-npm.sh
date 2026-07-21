@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # 将 node_modules 中的小程序 npm 包同步到 miniprogram_npm/
-# 等价于微信开发者工具「工具 → 构建 npm」（仅处理 tdesign-miniprogram）
-# 并将 TDesign 图标字体改为本地 assets（避免 CDN ERR_CACHE_MISS）
+# 并把 TDesign 图标字体以 base64 写入 icon.wxss（微信拒绝本地 ttf/woff 路径）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,36 +13,33 @@ rm -rf miniprogram_npm/tdesign-miniprogram
 mkdir -p miniprogram_npm
 cp -r node_modules/tdesign-miniprogram/miniprogram_dist miniprogram_npm/tdesign-miniprogram
 
-# 图标字体走本地，避免微信小程序加载 tdesign.gtimg.com 失败
 ICON_WXSS="miniprogram_npm/tdesign-miniprogram/icon/icon.wxss"
-if [[ -f "$ICON_WXSS" ]]; then
-  # 相对 icon/ 目录：../../assets/fonts/
-  sed -i \
-    -e "s|https://tdesign.gtimg.com/icon/[0-9.]*/fonts/t\.eot[^'\")]*|/assets/fonts/t.ttf|g" \
-    -e "s|https://tdesign.gtimg.com/icon/[0-9.]*/fonts/t\.woff|/assets/fonts/t.woff|g" \
-    -e "s|https://tdesign.gtimg.com/icon/[0-9.]*/fonts/t\.ttf|/assets/fonts/t.ttf|g" \
-    -e "s|https://tdesign.gtimg.com/icon/[0-9.]*/fonts/t\.svg[^'\")]*|/assets/fonts/t.ttf|g" \
-    "$ICON_WXSS"
-  # 简化为仅本地 woff/ttf
+FONT_WOFF="assets/fonts/t.woff"
+if [[ -f "$ICON_WXSS" && -f "$FONT_WOFF" ]]; then
   python3 - <<'PY'
 from pathlib import Path
+import base64
 import re
-p = Path("miniprogram_npm/tdesign-miniprogram/icon/icon.wxss")
-text = p.read_text(encoding="utf-8")
-text = re.sub(
-    r"@font-face\s*\{[^}]*font-family:\s*t;[^}]*\}",
-    """@font-face {
+
+wxss = Path("miniprogram_npm/tdesign-miniprogram/icon/icon.wxss")
+woff = Path("assets/fonts/t.woff").read_bytes()
+b64 = base64.b64encode(woff).decode("ascii")
+face = f"""@font-face {{
   font-family: t;
-  src: url('/assets/fonts/t.woff') format('woff'), url('/assets/fonts/t.ttf') format('truetype');
+  src: url('data:font/woff;charset=utf-8;base64,{b64}') format('woff');
   font-weight: normal;
   font-style: normal;
-}""",
+}}"""
+text = wxss.read_text(encoding="utf-8")
+text, n = re.subn(
+    r"@font-face\s*\{[^}]*font-family:\s*t;[^}]*\}",
+    face,
     text,
     count=1,
     flags=re.DOTALL,
 )
-p.write_text(text, encoding="utf-8")
-print("已将 TDesign 图标字体改为本地 /assets/fonts/")
+wxss.write_text(text, encoding="utf-8")
+print(f"已将 TDesign 图标字体嵌入为 base64，替换 {n} 处 @font-face")
 PY
 fi
 

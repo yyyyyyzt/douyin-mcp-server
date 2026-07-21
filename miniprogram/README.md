@@ -48,6 +48,6 @@ npm run build:npm
 ## 5. UI 说明
 
 - 对话为默认首页；输入区固定在底部（类通用 AI 对话）
-- 图标字体本地化：`assets/fonts/`（`npm run build:npm` 会改写 TDesign CDN）
+- 图标字体：`assets/fonts/t.woff`；`npm run build:npm`（`scripts/build-npm.sh`）会把 TDesign `icon.wxss` 的 `@font-face` 改写为 **base64**（微信拒绝本地 ttf/woff 路径）
 - 设计约定：[`../skills/miniprogram-design/SKILL.md`](../skills/miniprogram-design/SKILL.md)
 - 设计与计划：[`../docs/DESIGN.md`](../docs/DESIGN.md)、[`../docs/DEV_PLAN.md`](../docs/DEV_PLAN.md)
