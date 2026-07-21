@@ -1,8 +1,8 @@
-# 自装助手
+# 今天收藏什么啦
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-刷到认可的装修知识 → 粘贴分享链接自动转写、整理，存进**自己的知识库** →
+抖音刷到认可的知识 → 粘贴分享链接自动转写、整理，存进**自己的知识库** →
 和 AI 对话时，AI **严格基于这些知识**回答，绝不编造（防幻觉）。
 
 主形态为**微信原生小程序**（`miniprogram/`，AI 对话为中心）；Web 端（`web/`）仅作
@@ -77,11 +77,3 @@ uv run python scripts/check_api_keys.py   # --only llm | asr
 
 - 本项目仅供学习和研究使用，使用者需遵守相关法律法规。
 - 禁止用于侵犯知识产权的行为；作者不对使用本项目产生的损失承担责任。
-
-## 📄 许可证
-
-Apache License 2.0
-
-## 👨‍💻 作者
-
-**yzfly** - [GitHub](https://github.com/yzfly) | [Email](mailto:yz.liu.me@gmail.com)
