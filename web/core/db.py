@@ -336,7 +336,7 @@ def update_user_profile(
     nickname: Optional[str] = None,
     avatar_url: Optional[str] = None,
 ) -> bool:
-    """更新用户昵称/头像（微信 getUserProfile 同步）。"""
+    """更新用户昵称/头像。"""
     updates: dict[str, Any] = {}
     if nickname is not None:
         updates["nickname"] = (nickname or "").strip() or None

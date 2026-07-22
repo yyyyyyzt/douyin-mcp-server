@@ -1,6 +1,6 @@
 /** 用户资料、额度与退出登录 */
 
-const { request } = require('./request');
+const { request, uploadFile, getBaseUrl } = require('./request');
 const { clearToken } = require('./auth');
 
 const USER_KEY = 'user_profile';
@@ -17,6 +17,30 @@ function getDisplayName(user) {
 function getAvatarInitial(user) {
   const name = getDisplayName(user);
   return name.slice(0, 1) || '友';
+}
+
+function resolveAvatarUrl(avatarUrl) {
+  const url = (avatarUrl || '').trim();
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('wxfile://')) {
+    return url;
+  }
+  if (url.startsWith('/')) {
+    const base = getBaseUrl().replace(/\/$/, '');
+    return base ? `${base}${url}` : url;
+  }
+  return url;
+}
+
+function isLocalAvatarPath(path) {
+  const p = (path || '').trim();
+  if (!p) return false;
+  return (
+    p.startsWith('wxfile://') ||
+    p.startsWith('http://tmp/') ||
+    p.startsWith('https://tmp/') ||
+    (!p.startsWith('http://') && !p.startsWith('https://') && !p.startsWith('/static/'))
+  );
 }
 
 function setUserCache(user) {
@@ -86,7 +110,7 @@ function buildPageUserState() {
   const quotaPercent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   return {
     displayName: getDisplayName(user),
-    avatarUrl: (user && user.avatar_url) || '',
+    avatarUrl: resolveAvatarUrl(user && user.avatar_url),
     avatarInitial: getAvatarInitial(user),
     quota,
     quotaPercent,
@@ -112,30 +136,42 @@ async function fetchProfile() {
   return data;
 }
 
-function syncWechatProfile() {
-  return new Promise((resolve) => {
-    wx.getUserProfile({
-      desc: '用于展示你的昵称和头像',
-      success: async (res) => {
-        const info = (res && res.userInfo) || {};
-        try {
-          const data = await request({
-            url: '/api/me',
-            method: 'PUT',
-            data: {
-              nickname: info.nickName || '',
-              avatar_url: info.avatarUrl || '',
-            },
-          });
-          applyLoginData(data);
-          resolve(data);
-        } catch (e) {
-          resolve(null);
-        }
-      },
-      fail: () => resolve(null),
-    });
+async function updateProfile({ nickname, avatarUrl }) {
+  const data = await request({
+    url: '/api/me',
+    method: 'PUT',
+    data: {
+      nickname: nickname || '',
+      avatar_url: avatarUrl || '',
+    },
   });
+  applyLoginData(data);
+  return data;
+}
+
+async function uploadAvatar(filePath) {
+  const data = await uploadFile({
+    url: '/api/me/avatar',
+    filePath,
+    name: 'file',
+  });
+  applyLoginData(data);
+  return data;
+}
+
+async function saveProfile({ nickname, avatarPath }) {
+  const name = (nickname || '').trim();
+  if (!name) {
+    throw new Error('请输入昵称');
+  }
+  let avatarUrl = '';
+  if (avatarPath && isLocalAvatarPath(avatarPath)) {
+    const uploaded = await uploadAvatar(avatarPath);
+    avatarUrl = (uploaded.user && uploaded.user.avatar_url) || '';
+  } else if (avatarPath) {
+    avatarUrl = avatarPath;
+  }
+  return updateProfile({ nickname: name, avatarUrl });
 }
 
 function logout() {
@@ -152,9 +188,12 @@ function logout() {
 
 module.exports = {
   getDisplayName,
+  resolveAvatarUrl,
   applyLoginData,
   fetchProfile,
-  syncWechatProfile,
+  updateProfile,
+  uploadAvatar,
+  saveProfile,
   syncPageUser,
   syncComponentUser,
   buildPageUserState,

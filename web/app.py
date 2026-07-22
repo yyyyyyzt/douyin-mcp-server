@@ -97,6 +97,15 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 # 静态资源（PWA 图标 / manifest）
 _STATIC_DIR = Path(__file__).parent / "static"
 _STATIC_DIR.mkdir(parents=True, exist_ok=True)
+_AVATAR_DIR = _STATIC_DIR / "avatars"
+_AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+_MAX_AVATAR_BYTES = 2 * 1024 * 1024
+_AVATAR_EXT = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
@@ -347,13 +356,43 @@ async def update_me(
     user: dict = Depends(get_current_user),
     conn=Depends(get_db),
 ):
-    """同步微信昵称/头像。"""
+    """更新昵称/头像 URL。"""
     db.update_user_profile(
         conn,
         user["id"],
         nickname=req.nickname,
         avatar_url=req.avatar_url,
     )
+    fresh = db.get_user_by_id(conn, user["id"])
+    if fresh is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _me_payload(conn, fresh)
+
+
+@app.post("/api/me/avatar")
+async def upload_me_avatar(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """上传头像文件，保存到 /static/avatars 并更新用户资料。"""
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in _AVATAR_EXT:
+        raise HTTPException(status_code=400, detail="仅支持 JPG、PNG、WebP、GIF 图片")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="头像文件为空")
+    if len(data) > _MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=400, detail="头像不能超过 2MB")
+
+    ext = _AVATAR_EXT[content_type]
+    filename = f"{user['id']}_{uuid.uuid4().hex}{ext}"
+    dest = _AVATAR_DIR / filename
+    dest.write_bytes(data)
+
+    avatar_url = f"/static/avatars/{filename}"
+    db.update_user_profile(conn, user["id"], avatar_url=avatar_url)
     fresh = db.get_user_by_id(conn, user["id"])
     if fresh is None:
         raise HTTPException(status_code=404, detail="用户不存在")

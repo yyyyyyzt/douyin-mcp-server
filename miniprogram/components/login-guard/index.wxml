@@ -1,7 +1,30 @@
 <view wx:if="{{visible}}" class="login-guard">
   <view class="brand">自装助手</view>
-  <view class="headline">把装修知识变成你的对话助手</view>
-  <view class="desc">收藏短视频里的经验，提问时严格依据你的知识回答</view>
-  <button class="login-btn" loading="{{loading}}" bindtap="onLogin">微信一键登录</button>
+  <view class="headline">完善资料后开始使用</view>
+  <view class="desc">按微信规范选择头像并填写昵称，用于展示你的个人资料</view>
+
+  <view class="profile-form">
+    <button class="avatar-picker" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
+      <image wx:if="{{avatarPath}}" class="avatar-img" src="{{avatarPath}}" mode="aspectFill" />
+      <view wx:else class="avatar-placeholder">
+        <text class="avatar-icon">+</text>
+        <text class="avatar-hint">选择头像</text>
+      </view>
+    </button>
+
+    <view class="nickname-row">
+      <text class="nickname-label">昵称</text>
+      <input
+        class="nickname-input"
+        type="nickname"
+        placeholder="请输入昵称"
+        value="{{nickname}}"
+        bindinput="onNicknameInput"
+        bindnicknamereview="onNicknameReview"
+      />
+    </view>
+  </view>
+
+  <button class="login-btn" loading="{{loading}}" bindtap="onSubmit">开始使用</button>
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>
