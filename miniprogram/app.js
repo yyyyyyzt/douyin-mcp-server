@@ -6,12 +6,16 @@ App({
     apiBase: API_BASE,
     loggedIn: false,
     needLogin: false,
+    user: null,
+    quota: null,
   },
   onLaunch() {
     const auth = require('./utils/auth');
+    const user = require('./utils/user');
     if (auth.getToken()) {
       this.globalData.loggedIn = true;
       this.globalData.needLogin = false;
+      user.fetchProfile().catch(() => {});
       return;
     }
     auth
@@ -19,6 +23,7 @@ App({
       .then(() => {
         this.globalData.loggedIn = true;
         this.globalData.needLogin = false;
+        return user.fetchProfile();
       })
       .catch(() => {
         this.globalData.loggedIn = false;

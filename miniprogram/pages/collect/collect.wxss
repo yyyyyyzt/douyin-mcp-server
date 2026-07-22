@@ -5,6 +5,47 @@
   box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
 }
 
+.quota-card {
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 16rpx rgba(15, 23, 42, 0.04);
+}
+
+.quota-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.quota-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.quota-num {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ff6b4a;
+}
+
+.quota-hint {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: #6b7280;
+}
+
+.quota-warn {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #d97706;
+}
+
 .collect-textarea {
   background: transparent;
   min-height: 200rpx;

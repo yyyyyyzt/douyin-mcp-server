@@ -57,6 +57,12 @@ function wechatLogin() {
               return;
             }
             setToken(data.token);
+            try {
+              const user = require('./user');
+              user.applyLoginData(data);
+            } catch (e) {
+              /* ignore */
+            }
             resolve(data);
           },
           fail: reject,

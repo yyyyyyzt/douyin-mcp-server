@@ -1,12 +1,30 @@
 <view class="page-root">
   <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
   <block wx:if="{{!needLogin}}">
+    <page-user-bar bind:logout="onUserLogout" />
     <view class="page-header">
       <view>
         <view class="page-title">收集</view>
         <view class="page-subtitle">把刷到的装修经验存成自己的知识</view>
       </view>
       <view class="settings-entry" bindtap="goSettings" aria-role="button">设置</view>
+    </view>
+
+    <view wx:if="{{quota}}" class="quota-card">
+      <view class="quota-head">
+        <text class="quota-title">今日链接收藏额度</text>
+        <text class="quota-num">{{quota.extract_used}} / {{quota.extract_limit}}</text>
+      </view>
+      <t-progress
+        percentage="{{quotaPercent}}"
+        stroke-width="8"
+        color="{{quotaExhausted ? '#9ca3af' : '#FF6B4A'}}"
+      />
+      <view class="quota-hint">
+        抖音链接需转写视频，会消耗算力，每日限额内可免费收藏。
+        纯文字笔记与 AI 对话不限次。
+      </view>
+      <view wx:if="{{quotaExhausted}}" class="quota-warn">今日额度已用完，可继续保存文字笔记。</view>
     </view>
 
     <scroll-view class="scroll-body" scroll-y enhanced show-scrollbar="{{false}}">

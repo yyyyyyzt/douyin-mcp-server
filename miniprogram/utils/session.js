@@ -1,4 +1,4 @@
-/** 页面登录态检查：未登录时展示 login-guard。 */
+/** 页面登录态与用户上下文 */
 
 function refreshLoginState(page) {
   const app = getApp();
@@ -8,6 +8,22 @@ function refreshLoginState(page) {
   return loggedIn && !needLogin;
 }
 
+async function refreshUserContext(page, options) {
+  const forceFetch = !!(options && options.forceFetch);
+  if (!refreshLoginState(page)) return false;
+  const user = require('./user');
+  user.syncPageUser(page);
+  if (forceFetch || !getApp().globalData.user) {
+    try {
+      await user.fetchProfile();
+      user.syncPageUser(page);
+    } catch (e) {
+      /* 网络失败时仍展示缓存昵称 */
+    }
+  }
+  return true;
+}
+
 function onLoginSuccess(page, afterLogin) {
   const app = getApp();
   if (app && app.globalData) {
@@ -15,7 +31,18 @@ function onLoginSuccess(page, afterLogin) {
     app.globalData.needLogin = false;
   }
   page.setData({ needLogin: false });
+  const user = require('./user');
+  user.syncPageUser(page);
   if (typeof afterLogin === 'function') afterLogin();
 }
 
-module.exports = { refreshLoginState, onLoginSuccess };
+function onUserLogout(page) {
+  page.setData({ needLogin: true });
+}
+
+module.exports = {
+  refreshLoginState,
+  refreshUserContext,
+  onLoginSuccess,
+  onUserLogout,
+};

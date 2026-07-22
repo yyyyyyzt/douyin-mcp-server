@@ -1,4 +1,5 @@
 const auth = require('../../utils/auth');
+const user = require('../../utils/user');
 
 Component({
   properties: {
@@ -14,6 +15,12 @@ Component({
       this.setData({ loading: true, error: '' });
       try {
         await auth.wechatLogin();
+        await user.syncWechatProfile();
+        try {
+          await user.fetchProfile();
+        } catch (e) {
+          /* 已有登录响应中的基础资料即可 */
+        }
         const app = getApp();
         if (app && app.globalData) {
           app.globalData.loggedIn = true;

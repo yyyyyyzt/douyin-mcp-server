@@ -33,8 +33,15 @@
 }
 
 .welcome {
-  padding: 80rpx 12rpx 40rpx;
+  padding: 48rpx 12rpx 40rpx;
   text-align: left;
+}
+
+.welcome-greet {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 12rpx;
 }
 
 .welcome-brand {

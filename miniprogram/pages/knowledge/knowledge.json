@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "知识库",
   "usingComponents": {
-    "login-guard": "/components/login-guard/index"
+    "login-guard": "/components/login-guard/index",
+    "page-user-bar": "/components/page-user-bar/index"
   }
 }

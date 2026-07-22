@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     openid TEXT NOT NULL UNIQUE,
     unionid TEXT,
+    nickname TEXT,
+    avatar_url TEXT,
     level INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP
@@ -257,6 +259,8 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
 
     if "users" in tables:
         _ensure_column(conn, "users", "level", "level INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "users", "nickname", "nickname TEXT")
+        _ensure_column(conn, "users", "avatar_url", "avatar_url TEXT")
 
     if "knowledge_cards" in tables:
         cols = _table_columns(conn, "knowledge_cards")
@@ -323,6 +327,30 @@ def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> Optional[dict]:
 def get_user_by_openid(conn: sqlite3.Connection, openid: str) -> Optional[dict]:
     row = conn.execute("SELECT * FROM users WHERE openid = ?", (openid,)).fetchone()
     return dict(row) if row else None
+
+
+def update_user_profile(
+    conn: sqlite3.Connection,
+    user_id: int,
+    *,
+    nickname: Optional[str] = None,
+    avatar_url: Optional[str] = None,
+) -> bool:
+    """更新用户昵称/头像（微信 getUserProfile 同步）。"""
+    updates: dict[str, Any] = {}
+    if nickname is not None:
+        updates["nickname"] = (nickname or "").strip() or None
+    if avatar_url is not None:
+        updates["avatar_url"] = (avatar_url or "").strip() or None
+    if not updates:
+        return False
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    cur = conn.execute(
+        f"UPDATE users SET {set_clause} WHERE id = ?",
+        list(updates.values()) + [user_id],
+    )
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def insert_card(

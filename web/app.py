@@ -186,6 +186,46 @@ def _serialize_card(row: dict) -> dict:
     return out
 
 
+def _display_name(user: dict) -> str:
+    nickname = (user.get("nickname") or "").strip()
+    if nickname:
+        return nickname
+    uid = user.get("id")
+    if uid:
+        return f"用户{uid}"
+    return "自装用户"
+
+
+def _serialize_user(user: dict) -> dict:
+    """对外暴露的用户信息（不含 openid）。"""
+    return {
+        "id": int(user["id"]),
+        "nickname": (user.get("nickname") or "").strip(),
+        "avatar_url": (user.get("avatar_url") or "").strip(),
+        "display_name": _display_name(user),
+        "level": int(user.get("level") or 0),
+    }
+
+
+def _user_quota(conn: sqlite3.Connection, user: dict) -> dict:
+    level = int(user.get("level") or 0)
+    used = db.get_extract_calls(conn, user["id"])
+    limit = get_daily_extract_limit(level)
+    return {
+        "extract_used": used,
+        "extract_limit": limit,
+        "extract_remaining": max(0, limit - used),
+        "chat_unlimited": True,
+    }
+
+
+def _me_payload(conn: sqlite3.Connection, user: dict) -> dict:
+    return {
+        "user": _serialize_user(user),
+        "quota": _user_quota(conn, user),
+    }
+
+
 class VideoRequest(BaseModel):
     """视频请求模型"""
     url: str
@@ -229,7 +269,12 @@ async def wechat_login(req: WechatLoginRequest, conn=Depends(get_db)):
     db.touch_user_login(conn, user_id)
     user = db.get_user_by_id(conn, user_id)
     token = auth_core.issue_token(user_id, user["openid"])
-    return {"success": True, "token": token, "user": user}
+    return {
+        "success": True,
+        "token": token,
+        "user": _serialize_user(user),
+        **_me_payload(conn, user),
+    }
 
 
 @app.post("/api/auth/local")
@@ -241,7 +286,42 @@ async def local_login(conn=Depends(get_db)):
     db.touch_user_login(conn, user_id)
     user = db.get_user_by_id(conn, user_id)
     token = auth_core.issue_token(user_id, user["openid"])
-    return {"success": True, "token": token, "user": user}
+    return {
+        "success": True,
+        "token": token,
+        "user": _serialize_user(user),
+        **_me_payload(conn, user),
+    }
+
+
+class ProfileUpdateRequest(BaseModel):
+    nickname: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+@app.get("/api/me")
+async def get_me(user: dict = Depends(get_current_user), conn=Depends(get_db)):
+    """当前用户资料与今日链接收藏额度。"""
+    return _me_payload(conn, user)
+
+
+@app.put("/api/me")
+async def update_me(
+    req: ProfileUpdateRequest,
+    user: dict = Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """同步微信昵称/头像。"""
+    db.update_user_profile(
+        conn,
+        user["id"],
+        nickname=req.nickname,
+        avatar_url=req.avatar_url,
+    )
+    fresh = db.get_user_by_id(conn, user["id"])
+    if fresh is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _me_payload(conn, fresh)
 
 
 @app.get("/", response_class=HTMLResponse)

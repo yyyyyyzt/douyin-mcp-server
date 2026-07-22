@@ -2,6 +2,7 @@
   "navigationBarTitleText": "AI 助手",
   "usingComponents": {
     "chat-message": "/components/chat-message/index",
-    "login-guard": "/components/login-guard/index"
+    "login-guard": "/components/login-guard/index",
+    "page-user-bar": "/components/page-user-bar/index"
   }
 }

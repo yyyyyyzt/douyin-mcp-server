@@ -1,6 +1,7 @@
 <view class="page-root">
   <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
   <block wx:if="{{!needLogin}}">
+    <page-user-bar bind:logout="onUserLogout" />
     <view class="page-header">
       <view>
         <view class="page-title">知识库</view>

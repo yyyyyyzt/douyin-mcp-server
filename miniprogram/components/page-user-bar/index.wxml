@@ -1,0 +1,8 @@
+<view class="user-bar">
+  <view class="user-main">
+    <image wx:if="{{avatarUrl}}" class="avatar" src="{{avatarUrl}}" mode="aspectFill" />
+    <view wx:else class="avatar avatar-fallback">{{avatarInitial}}</view>
+    <text class="nickname">{{displayName}}</text>
+  </view>
+  <text wx:if="{{showLogout}}" class="logout" catchtap="onLogout">退出</text>
+</view>

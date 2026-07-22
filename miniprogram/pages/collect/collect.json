@@ -3,6 +3,7 @@
   "usingComponents": {
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-progress": "tdesign-miniprogram/progress/progress",
-    "login-guard": "/components/login-guard/index"
+    "login-guard": "/components/login-guard/index",
+    "page-user-bar": "/components/page-user-bar/index"
   }
 }

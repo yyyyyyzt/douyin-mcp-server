@@ -1,6 +1,6 @@
 const { request, uploadFile } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
-const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
+const { refreshUserContext, onLoginSuccess, onUserLogout } = require('../../utils/session');
 const { getSelectedModels } = require('../../utils/models');
 const {
   SCENARIO_KINDS,
@@ -23,15 +23,20 @@ Page({
     attachment: null,
     scrollIntoView: '',
     activeScenarioKind: SCENARIO_KINDS.KNOWLEDGE_QA,
+    displayName: '自装用户',
   },
 
   onShow() {
     syncTabBarForRoute(this);
-    refreshLoginState(this);
+    refreshUserContext(this, { forceFetch: true });
   },
 
   onLoginSuccess() {
-    onLoginSuccess(this);
+    onLoginSuccess(this, () => refreshUserContext(this, { forceFetch: true }));
+  },
+
+  onUserLogout() {
+    onUserLogout(this);
   },
 
   goSettings() {
@@ -165,7 +170,7 @@ Page({
         grounded: false,
       };
       this.setData({ messages });
-      refreshLoginState(this);
+      refreshUserContext(this);
     } finally {
       this.setData({ loading: false });
       this.scrollToBottom();

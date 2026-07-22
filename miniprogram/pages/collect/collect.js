@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
-const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
+const { refreshUserContext, onLoginSuccess, onUserLogout } = require('../../utils/session');
 const { mdExcerpt } = require('../../utils/markdown');
 const { getSelectedModels } = require('../../utils/models');
 
@@ -15,15 +15,23 @@ Page({
     stepLabel: '',
     error: '',
     lastCard: null,
+    displayName: '自装用户',
+    quota: null,
+    quotaPercent: 0,
+    quotaExhausted: false,
   },
 
   onShow() {
     syncTabBarForRoute(this);
-    refreshLoginState(this);
+    refreshUserContext(this, { forceFetch: true });
   },
 
   onLoginSuccess() {
-    onLoginSuccess(this);
+    onLoginSuccess(this, () => refreshUserContext(this, { forceFetch: true }));
+  },
+
+  onUserLogout() {
+    onUserLogout(this);
   },
 
   onInput(e) {
@@ -59,6 +67,10 @@ Page({
   async onSave() {
     const input = (this.data.input || '').trim();
     if (!input || this.data.busy) return;
+    if (this.isLikelyLink(input) && this.data.quotaExhausted) {
+      wx.showToast({ title: '今日链接收藏额度已用完，明天再来', icon: 'none' });
+      return;
+    }
     this.setData({
       busy: true,
       error: '',
@@ -81,7 +93,7 @@ Page({
       }
     } catch (e) {
       this.setData({ error: e.message || '保存失败，请检查链接或稍后重试' });
-      refreshLoginState(this);
+      refreshUserContext(this);
     } finally {
       this.setData({ busy: false });
     }
@@ -115,6 +127,7 @@ Page({
       input: '',
     });
     wx.showToast({ title: '已保存到知识库', icon: 'success' });
+    refreshUserContext(this, { forceFetch: true });
   },
 
   pollExtract(taskId) {
@@ -184,5 +197,6 @@ Page({
       input: '',
     });
     wx.showToast({ title: '已保存到知识库', icon: 'success' });
+    refreshUserContext(this, { forceFetch: true });
   },
 });

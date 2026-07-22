@@ -1,6 +1,7 @@
 <view class="page-root chat-page">
   <login-guard visible="{{needLogin}}" bind:success="onLoginSuccess" />
   <block wx:if="{{!needLogin}}">
+    <page-user-bar bind:logout="onUserLogout" />
     <view class="chat-topbar">
       <view class="chat-topbar-title">AI 助手</view>
       <view class="chat-topbar-action" bindtap="goSettings">设置</view>
@@ -15,6 +16,7 @@
       scroll-with-animation
     >
       <view wx:if="{{!messages.length}}" class="welcome">
+        <view class="welcome-greet">你好，{{displayName}}</view>
         <view class="welcome-brand">自装助手</view>
         <view class="welcome-text">基于你收藏的装修知识回答，有依据才敢用。</view>
         <view class="chip-row">

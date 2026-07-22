@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request');
 const { syncTabBarForRoute } = require('../../utils/tab');
-const { refreshLoginState, onLoginSuccess } = require('../../utils/session');
+const { refreshUserContext, onLoginSuccess, onUserLogout } = require('../../utils/session');
 const { mdToNodes, mdExcerpt } = require('../../utils/markdown');
 
 function cardBody(c) {
@@ -24,13 +24,20 @@ Page({
 
   onShow() {
     syncTabBarForRoute(this);
-    if (refreshLoginState(this)) {
-      this.loadCards();
-    }
+    refreshUserContext(this, { forceFetch: true }).then((ok) => {
+      if (ok) this.loadCards();
+    });
   },
 
   onLoginSuccess() {
-    onLoginSuccess(this, () => this.loadCards());
+    onLoginSuccess(this, () => {
+      refreshUserContext(this, { forceFetch: true });
+      this.loadCards();
+    });
+  },
+
+  onUserLogout() {
+    onUserLogout(this);
   },
 
   noop() {},
@@ -67,7 +74,7 @@ Page({
       const d = await request({ url: '/api/cards' });
       this.setData({ cards: d.cards || [] }, () => this.applyFilter());
     } catch (e) {
-      refreshLoginState(this);
+      refreshUserContext(this);
       wx.showToast({ title: e.message || '加载失败', icon: 'none' });
     } finally {
       this.setData({ loading: false });

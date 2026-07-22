@@ -35,7 +35,8 @@ def test_local_login_issues_token(env):
     data = resp.json()
     assert data["success"] is True
     assert data["token"]
-    assert data["user"]["openid"] == db.LOCAL_WEB_OPENID
+    assert data["user"]["display_name"]
+    assert "quota" in data
 
 
 def test_local_login_disabled_without_flag(env, monkeypatch):
@@ -60,8 +61,38 @@ def test_wechat_login_issues_token(env, monkeypatch):
     data = resp.json()
     assert data["success"] is True
     assert data["token"]
-    assert data["user"]["openid"] == "wx-openid-1"
+    assert data["user"]["display_name"].startswith("用户")
+    assert data["quota"]["extract_limit"] == 10
     assert db.get_user_by_openid(conn, "wx-openid-1") is not None
+
+
+def test_get_me_returns_profile_and_quota(env):
+    client, conn, user_a, _ = env
+    db.update_user_profile(conn, user_a["id"], nickname="小明", avatar_url="https://x/a.png")
+    user_a = db.get_user_by_id(conn, user_a["id"])
+    headers = auth_headers(user_a)
+    resp = client.get("/api/me", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user"]["nickname"] == "小明"
+    assert data["user"]["display_name"] == "小明"
+    assert data["quota"]["extract_used"] == 0
+    assert data["quota"]["chat_unlimited"] is True
+
+
+def test_update_me_profile(env):
+    client, conn, user_a, _ = env
+    headers = auth_headers(user_a)
+    resp = client.put(
+        "/api/me",
+        headers=headers,
+        json={"nickname": "自装达人", "avatar_url": "https://cdn/1.jpg"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user"]["nickname"] == "自装达人"
+    row = db.get_user_by_id(conn, user_a["id"])
+    assert row["nickname"] == "自装达人"
 
 
 def test_cards_requires_auth(env):
