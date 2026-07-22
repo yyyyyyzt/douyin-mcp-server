@@ -4,7 +4,7 @@
     <view class="page-header">
       <view>
         <view class="page-title">知识库</view>
-        <view class="page-subtitle">按标签浏览你收藏的装修知识</view>
+        <view class="page-subtitle">浏览你收藏的装修知识</view>
       </view>
       <view class="settings-entry" bindtap="goSettings">设置</view>
     </view>
@@ -13,65 +13,40 @@
       <input
         class="search-input"
         value="{{search}}"
-        placeholder="搜防水、报价、验收…"
+        placeholder="搜索标题或正文…"
         confirm-type="search"
         bindinput="onSearchChange"
       />
       <text wx:if="{{search}}" class="search-clear" bindtap="onSearchClear">清除</text>
     </view>
 
-    <scroll-view class="stage-scroll" scroll-x enhanced show-scrollbar="{{false}}">
-      <view class="stage-row">
-        <view
-          wx:for="{{stageFilters}}"
-          wx:key="key"
-          class="stage-chip {{stage === item.key ? 'active' : ''}}"
-          data-stage="{{item.key}}"
-          bindtap="onStageTap"
-        >
-          <text>{{item.label}}</text>
-          <text class="chip-count">{{item.count}}</text>
-        </view>
-      </view>
-    </scroll-view>
-
     <scroll-view class="scroll-body" scroll-y enhanced show-scrollbar="{{false}}">
       <view wx:if="{{loading}}" class="loading-wrap">加载中…</view>
 
-      <view wx:elif="{{!sections.length}}" class="empty-box">
+      <view wx:elif="{{!displayCards.length}}" class="empty-box">
         <view class="empty-title">还没有知识</view>
         <view class="empty-desc">去收集页保存第一条装修经验</view>
         <button class="empty-btn" bindtap="goCollect">去收集</button>
       </view>
 
       <block wx:else>
-        <view wx:for="{{sections}}" wx:key="key" class="section">
-          <view class="section-head">
-            <text class="section-title">{{item.label}}</text>
-            <text class="section-count">{{item.cards.length}} 条</text>
+        <view
+          wx:for="{{displayCards}}"
+          wx:key="id"
+          class="card-item"
+          data-id="{{item.id}}"
+          bindtap="openDetail"
+          bindlongpress="openCardMenu"
+        >
+          <view class="card-head">
+            <view class="card-title">{{item.title || '未命名'}}</view>
+            <view
+              class="card-manage"
+              data-id="{{item.id}}"
+              catchtap="openCardMenu"
+            >管理</view>
           </view>
-          <view
-            wx:for="{{item.cards}}"
-            wx:for-item="card"
-            wx:key="id"
-            class="card-item"
-            data-id="{{card.id}}"
-            bindtap="openDetail"
-            bindlongpress="openCardMenu"
-          >
-            <view class="card-head">
-              <view class="card-title">{{card.title || '未命名'}}</view>
-              <view
-                class="card-manage"
-                data-id="{{card.id}}"
-                catchtap="openCardMenu"
-              >管理</view>
-            </view>
-            <view class="card-excerpt">{{card.excerpt}}</view>
-            <view class="card-meta">
-              <text class="card-tag">{{card.stageLabel}}</text>
-            </view>
-          </view>
+          <view class="card-excerpt">{{item.excerpt}}</view>
         </view>
       </block>
     </scroll-view>
@@ -85,7 +60,6 @@
 
         <block wx:if="{{!editing}}">
           <view class="detail-title">{{detail.title || '未命名'}}</view>
-          <view class="detail-stage">{{detail.stageLabel}}</view>
           <scroll-view scroll-y class="detail-body" enhanced show-scrollbar="{{false}}">
             <rich-text nodes="{{detailHtml}}" />
           </scroll-view>
@@ -99,10 +73,6 @@
           <scroll-view scroll-y class="edit-scroll" enhanced show-scrollbar="{{false}}">
             <view class="field-label">标题</view>
             <input class="detail-input" value="{{editTitle}}" bindinput="onEditTitle" placeholder="给这条知识起个标题" />
-            <view class="field-label">阶段标签</view>
-            <picker mode="selector" range="{{stageOptions}}" value="{{editStageIndex}}" bindchange="onEditStage">
-              <view class="stage-picker">{{stageOptions[editStageIndex]}}</view>
-            </picker>
             <view class="field-label">正文（支持 Markdown）</view>
             <textarea
               class="detail-textarea"
