@@ -120,10 +120,27 @@
   box-shadow: 0 2rpx 16rpx rgba(15, 23, 42, 0.04);
 }
 
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
 .card-title {
+  flex: 1;
   font-size: 30rpx;
   font-weight: 600;
   color: #1f2937;
+}
+
+.card-manage {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #ff6b4a;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #ffede8;
 }
 
 .card-excerpt {
@@ -157,45 +174,79 @@
   top: 0;
   bottom: 0;
   background: rgba(15, 23, 42, 0.45);
-  z-index: 1000;
+  z-index: 1200;
   display: flex;
   align-items: flex-end;
 }
 
 .detail-sheet {
   width: 100%;
-  max-height: 78vh;
+  max-height: 86vh;
   background: #fff;
   border-radius: 32rpx 32rpx 0 0;
-  padding: 32rpx;
-  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
 
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  flex-shrink: 0;
+}
+
+.sheet-header-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.sheet-close {
+  font-size: 26rpx;
+  color: #6b7280;
+  padding: 8rpx 4rpx;
+}
+
 .detail-title {
   font-size: 34rpx;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .detail-stage {
   margin-top: 8rpx;
   font-size: 24rpx;
   color: #ff6b4a;
+  flex-shrink: 0;
 }
 
 .detail-body {
   margin-top: 20rpx;
   flex: 1;
-  max-height: 48vh;
-  height: 48vh;
+  min-height: 0;
+  max-height: 52vh;
+}
+
+.edit-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 58vh;
+}
+
+.field-label {
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-bottom: 8rpx;
 }
 
 .detail-actions {
   display: flex;
   gap: 12rpx;
   margin-top: 24rpx;
+  flex-shrink: 0;
 }
 
 .sheet-btn {
@@ -234,11 +285,13 @@
 }
 
 .detail-input {
+  width: 100%;
+  box-sizing: border-box;
   border: 2rpx solid #e5e7eb;
   border-radius: 16rpx;
   padding: 20rpx;
   font-size: 28rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
 }
 
 .stage-picker {
@@ -246,18 +299,19 @@
   border-radius: 16rpx;
   padding: 20rpx;
   font-size: 28rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
   color: #374151;
 }
 
 .detail-textarea {
   width: 100%;
-  min-height: 240rpx;
+  min-height: 280rpx;
   border: 2rpx solid #e5e7eb;
   border-radius: 16rpx;
   padding: 20rpx;
   box-sizing: border-box;
   font-size: 28rpx;
+  margin-bottom: 8rpx;
 }
 
 .settings-entry {

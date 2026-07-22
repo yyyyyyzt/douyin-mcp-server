@@ -1,6 +1,7 @@
 .chat-page {
   padding-left: 0;
   padding-right: 0;
+  /* 输入区 fixed 悬浮，底部留白由 scroll 与 composer 各自处理 */
   padding-bottom: 0;
   background: #f7f4f1;
 }
@@ -27,7 +28,8 @@
 }
 
 .chat-scroll {
-  padding: 0 28rpx 24rpx;
+  padding: 0 28rpx calc(200rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .welcome {
@@ -70,11 +72,17 @@
 }
 
 .composer-shell {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(110rpx + env(safe-area-inset-bottom));
+  z-index: 100;
   flex-shrink: 0;
-  /* 安全区与 tabBar 高度已由 .page-root padding-bottom 预留 */
   padding: 12rpx 24rpx 16rpx;
-  background: #f7f4f1;
+  background: rgba(247, 244, 241, 0.98);
   border-top: 1rpx solid rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(12px);
+  box-sizing: border-box;
 }
 
 .attachment-bar {
