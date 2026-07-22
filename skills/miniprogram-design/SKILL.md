@@ -20,7 +20,7 @@ description: >-
 |---|---|---|
 | `authUtil.getToken is not a function` / `module 'utils/token.js' is not defined` | 循环依赖，或新建 utils 文件未被工具打包 | **不要**拆独立 `token.js`；token 读写内联在 `auth.js` / `request.js`；登录用 `wx.request` 直调 |
 | `Failed to load local font … t.ttf-do-not-use-local-path` / CDN 字体失败 | 微信拒绝本地 ttf/woff 路径，CDN 也不稳 | `assets/fonts/t.woff` + `scripts/build-npm.sh` 把 `@font-face` **改写为 base64 data URI**；自定义 tabBar **不用** TDesign 图标 |
-| 对话输入区被底部菜单挡住 | 自定义 tabBar 是 `position:fixed` 悬浮层，不占文档流 | `.page-root` 设 `padding-bottom: calc(112rpx + env(safe-area-inset-bottom))`；composer 不再单独加 safe-area |
+| 对话输入区被底部菜单挡住 | 自定义 tabBar 是 `position:fixed` 悬浮层 | `.composer-shell` 用 `position:fixed; bottom: calc(110rpx + env(safe-area-inset-bottom))`；`.chat-scroll` 加大 `padding-bottom` |
 | 设置页乱 | 滥用 `t-cell` note 折行 | 改成分组卡片 + radio 列表 |
 
 ## 页面骨架

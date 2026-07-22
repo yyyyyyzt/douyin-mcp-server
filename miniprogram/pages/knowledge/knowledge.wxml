@@ -57,8 +57,16 @@
             class="card-item"
             data-id="{{card.id}}"
             bindtap="openDetail"
+            bindlongpress="openCardMenu"
           >
-            <view class="card-title">{{card.title || '未命名'}}</view>
+            <view class="card-head">
+              <view class="card-title">{{card.title || '未命名'}}</view>
+              <view
+                class="card-manage"
+                data-id="{{card.id}}"
+                catchtap="openCardMenu"
+              >管理</view>
+            </view>
             <view class="card-excerpt">{{card.excerpt}}</view>
             <view class="card-meta">
               <text class="card-tag">{{card.stageLabel}}</text>
@@ -70,32 +78,45 @@
 
     <view wx:if="{{detailVisible}}" class="sheet-mask" bindtap="closeDetail">
       <view class="detail-sheet" catchtap="noop">
+        <view class="sheet-header">
+          <text class="sheet-header-title">{{editing ? '编辑知识' : '知识详情'}}</text>
+          <text class="sheet-close" catchtap="closeDetail">关闭</text>
+        </view>
+
         <block wx:if="{{!editing}}">
-          <view class="detail-title">{{detail.title}}</view>
+          <view class="detail-title">{{detail.title || '未命名'}}</view>
           <view class="detail-stage">{{detail.stageLabel}}</view>
           <scroll-view scroll-y class="detail-body" enhanced show-scrollbar="{{false}}">
             <rich-text nodes="{{detailHtml}}" />
           </scroll-view>
           <view class="detail-actions">
-            <button class="sheet-btn ghost" bindtap="toggleEdit">编辑</button>
+            <button class="sheet-btn primary" bindtap="toggleEdit">编辑</button>
             <button class="sheet-btn danger" bindtap="deleteDetail">删除</button>
-            <button class="sheet-btn primary" bindtap="closeDetail">关闭</button>
           </view>
         </block>
+
         <block wx:else>
-          <input class="detail-input" value="{{editTitle}}" bindinput="onEditTitle" placeholder="标题" />
-          <picker mode="selector" range="{{stageOptions}}" value="{{editStageIndex}}" bindchange="onEditStage">
-            <view class="stage-picker">阶段标签：{{stageOptions[editStageIndex]}}</view>
-          </picker>
-          <textarea
-            class="detail-textarea"
-            value="{{editBody}}"
-            bindinput="onEditBody"
-            maxlength="-1"
-            auto-height
-            placeholder="Markdown 正文"
-          />
-          <button class="sheet-btn primary block" bindtap="saveDetail">保存</button>
+          <scroll-view scroll-y class="edit-scroll" enhanced show-scrollbar="{{false}}">
+            <view class="field-label">标题</view>
+            <input class="detail-input" value="{{editTitle}}" bindinput="onEditTitle" placeholder="给这条知识起个标题" />
+            <view class="field-label">阶段标签</view>
+            <picker mode="selector" range="{{stageOptions}}" value="{{editStageIndex}}" bindchange="onEditStage">
+              <view class="stage-picker">{{stageOptions[editStageIndex]}}</view>
+            </picker>
+            <view class="field-label">正文（支持 Markdown）</view>
+            <textarea
+              class="detail-textarea"
+              value="{{editBody}}"
+              bindinput="onEditBody"
+              maxlength="-1"
+              auto-height
+              placeholder="写下要点、步骤或注意事项…"
+            />
+          </scroll-view>
+          <view class="detail-actions">
+            <button class="sheet-btn ghost" bindtap="cancelEdit">取消</button>
+            <button class="sheet-btn primary" bindtap="saveDetail">保存</button>
+          </view>
         </block>
       </view>
     </view>

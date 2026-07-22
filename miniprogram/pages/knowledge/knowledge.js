@@ -142,6 +142,10 @@ Page({
     const id = e.currentTarget.dataset.id;
     const card = this.data.cards.find((c) => c.id === id);
     if (!card) return;
+    this.showDetail(card);
+  },
+
+  showDetail(card) {
     const body = cardBody(card);
     const stageLabel = normalizeStage(card.stage);
     const editStageIndex = Math.max(0, STAGE_OPTIONS.indexOf(stageLabel));
@@ -156,12 +160,48 @@ Page({
     });
   },
 
+  openCardMenu(e) {
+    const id = e.currentTarget.dataset.id;
+    const card = this.data.cards.find((c) => c.id === id);
+    if (!card) return;
+    wx.showActionSheet({
+      itemList: ['查看详情', '编辑', '删除'],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          this.showDetail(card);
+        } else if (res.tapIndex === 1) {
+          this.showDetail(card);
+          this.setData({ editing: true });
+        } else if (res.tapIndex === 2) {
+          this.showDetail(card);
+          this.deleteDetail();
+        }
+      },
+    });
+  },
+
   closeDetail() {
     this.setData({ detailVisible: false, detail: null, editing: false, detailHtml: '' });
   },
 
   toggleEdit() {
     this.setData({ editing: true });
+  },
+
+  cancelEdit() {
+    const card = this.data.detail;
+    if (!card) {
+      this.setData({ editing: false });
+      return;
+    }
+    const body = cardBody(card);
+    const stageLabel = normalizeStage(card.stage);
+    this.setData({
+      editing: false,
+      editTitle: card.title || '',
+      editBody: body,
+      editStageIndex: Math.max(0, STAGE_OPTIONS.indexOf(stageLabel)),
+    });
   },
 
   onEditTitle(e) {
