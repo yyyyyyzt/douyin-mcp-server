@@ -95,6 +95,26 @@ def test_update_me_profile(env):
     assert row["nickname"] == "自装达人"
 
 
+def test_upload_me_avatar(env):
+    client, conn, user_a, _ = env
+    headers = auth_headers(user_a)
+    png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x01\x01\x01\x00\x18\xdd\x8d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    resp = client.post(
+        "/api/me/avatar",
+        headers=headers,
+        files={"file": ("avatar.png", png, "image/png")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    avatar_url = data["user"]["avatar_url"]
+    assert avatar_url.startswith("/static/avatars/")
+    row = db.get_user_by_id(conn, user_a["id"])
+    assert row["avatar_url"] == avatar_url
+
+
 def test_cards_requires_auth(env):
     client, _, _, _ = env
     resp = client.get("/api/cards")

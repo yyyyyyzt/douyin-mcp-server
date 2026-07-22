@@ -15,19 +15,13 @@ App({
     if (auth.getToken()) {
       this.globalData.loggedIn = true;
       this.globalData.needLogin = false;
-      user.fetchProfile().catch(() => {});
-      return;
-    }
-    auth
-      .ensureLogin()
-      .then(() => {
-        this.globalData.loggedIn = true;
-        this.globalData.needLogin = false;
-        return user.fetchProfile();
-      })
-      .catch(() => {
+      user.fetchProfile().catch(() => {
         this.globalData.loggedIn = false;
         this.globalData.needLogin = true;
       });
+      return;
+    }
+    this.globalData.loggedIn = false;
+    this.globalData.needLogin = true;
   },
 });

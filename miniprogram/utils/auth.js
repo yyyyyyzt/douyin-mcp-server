@@ -31,6 +31,13 @@ function getBaseUrl() {
   return (app && app.globalData && app.globalData.apiBase) || '';
 }
 
+function assertApiBase(base) {
+  const url = (base || '').trim();
+  if (!url || url.includes('your-api.example.com')) {
+    throw new Error('请先在 miniprogram/app.js 配置正确的 apiBase 地址');
+  }
+}
+
 function wechatLogin() {
   return new Promise((resolve, reject) => {
     wx.login({
@@ -40,6 +47,12 @@ function wechatLogin() {
           return;
         }
         const base = getBaseUrl();
+        try {
+          assertApiBase(base);
+        } catch (e) {
+          reject(e);
+          return;
+        }
         wx.request({
           url: `${base}/api/auth/wechat/login`,
           method: 'POST',
