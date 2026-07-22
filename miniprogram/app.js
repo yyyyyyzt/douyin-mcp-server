@@ -1,13 +1,23 @@
-/** 全局配置：在开发者工具中可改为本机后端地址 */
-const API_BASE = 'https://your-api.example.com';
+const config = require('./config');
+const { validateApiBase } = require('./utils/api-config');
+
+const API_BASE = String(config.API_BASE || '').trim().replace(/\/$/, '');
+const apiConfigError = validateApiBase(API_BASE);
 
 App({
   globalData: {
     apiBase: API_BASE,
+    apiConfigError,
     loggedIn: false,
     needLogin: false,
   },
   onLaunch() {
+    if (apiConfigError) {
+      console.warn('[api-config]', apiConfigError);
+      this.globalData.loggedIn = false;
+      this.globalData.needLogin = true;
+      return;
+    }
     const auth = require('./utils/auth');
     if (auth.getToken()) {
       this.globalData.loggedIn = true;
@@ -20,7 +30,8 @@ App({
         this.globalData.loggedIn = true;
         this.globalData.needLogin = false;
       })
-      .catch(() => {
+      .catch((e) => {
+        console.warn('[login]', (e && e.message) || e);
         this.globalData.loggedIn = false;
         this.globalData.needLogin = true;
       });

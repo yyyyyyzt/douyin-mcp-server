@@ -2,6 +2,9 @@
   <view class="brand">自装助手</view>
   <view class="headline">把装修知识变成你的对话助手</view>
   <view class="desc">收藏短视频里的经验，提问时严格依据你的知识回答</view>
-  <button class="login-btn" loading="{{loading}}" bindtap="onLogin">微信一键登录</button>
-  <view wx:if="{{error}}" class="error">{{error}}</view>
+  <view wx:if="{{configError}}" class="config-hint">{{configError}}</view>
+  <view wx:elif="{{apiBase}}" class="api-hint">后端：{{apiBase}}</view>
+  <button class="login-btn" loading="{{loading}}" bindtap="onLogin" disabled="{{!!configError}}">微信一键登录</button>
+  <view wx:if="{{error && !configError}}" class="error">{{error}}</view>
+  <view wx:elif="{{error}}" class="error">{{error}}</view>
 </view>

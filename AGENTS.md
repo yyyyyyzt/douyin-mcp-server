@@ -44,7 +44,8 @@ startup update script already runs `uv sync`, so the `.venv` is present and depe
 ### 微信小程序 / 多用户
 - 后端微信登录（`code2session` + HMAC Bearer token）与按 `user_id` 隔离已实现；
  WebUI 用 `ALLOW_LOCAL_AUTH=1` + `POST /api/auth/local` 兼容。
-- 配置：`WECHAT_APPID` / `WECHAT_SECRET` / `SESSION_SECRET` / `ALLOW_LOCAL_AUTH`。
+- 配置：`WECHAT_APPID` / `WECHAT_SECRET` / `SESSION_SECRET` / `ALLOW_LOCAL_AUTH`；`LOG_LEVEL=DEBUG` 可看请求日志。
+- 小程序 `miniprogram/config.js` 的 `API_BASE` 须为 HTTPS；手机预览要在微信公众平台配置 request 合法域名。
 - 本地调试小程序：微信开发者工具打开 `miniprogram/`，详情里勾选「不校验合法域名」；
  npm 构建见 `miniprogram/README.md`。
 - 不要把 `API_KEY` / `WECHAT_SECRET` 写进小程序代码；密钥只留在服务端 `.env`。

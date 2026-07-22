@@ -11,6 +11,10 @@
       <text class="value mono">{{apiBase}}</text>
     </view>
     <view class="row">
+      <text class="label">微信登录</text>
+      <text class="value {{wechatConfigured ? 'ok' : 'bad'}}">{{wechatConfigured ? '已配置' : '未配置'}}</text>
+    </view>
+    <view class="row">
       <text class="label">服务状态</text>
       <text class="value {{serverOk ? 'ok' : 'bad'}}">{{serverStatus}}</text>
     </view>

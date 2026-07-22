@@ -32,6 +32,23 @@
   margin-bottom: 56rpx;
 }
 
+.config-hint {
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  background: #fff7ed;
+  border-radius: 16rpx;
+  color: #c2410c;
+  font-size: 26rpx;
+  line-height: 1.55;
+}
+
+.api-hint {
+  margin-bottom: 24rpx;
+  font-size: 22rpx;
+  color: #9ca3af;
+  word-break: break-all;
+}
+
 .error {
   margin-top: 24rpx;
   color: #d97706;

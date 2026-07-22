@@ -32,8 +32,9 @@ npm run build:npm
 
 1. 打开 **`miniprogram/`** 为项目根目录
 2. 详情 → 本地设置 → 勾选 **「使用 npm 模块」**
-3. 修改 `app.js` 中 `API_BASE` 为后端地址
-4. 本地调试可勾选「不校验合法域名」
+3. 修改 `config.js` 中 `API_BASE` 为后端 **HTTPS** 地址（可复制 `config.example.js`）
+4. 模拟器本地调试可勾选「不校验合法域名」；**手机预览**必须在微信公众平台配置 request 合法域名
+5. 服务端 `.env` 配置 `WECHAT_APPID` / `WECHAT_SECRET`（与小程序 AppID 一致）
 
 ## 4. 组件路径说明
 

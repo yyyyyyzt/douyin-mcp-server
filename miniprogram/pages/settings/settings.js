@@ -8,6 +8,7 @@ Page({
     apiBase: '',
     serverOk: false,
     serverStatus: '检测中…',
+    wechatConfigured: false,
     checking: false,
     llmModels: [],
     asrModels: [],
@@ -40,7 +41,10 @@ Page({
         llmModel: savedLlm || defaultLlm,
         asrModel: savedAsr || defaultAsr,
         serverOk: !!d.api_key_configured,
-        serverStatus: d.api_key_configured ? '已连接' : '服务端未配置密钥',
+        wechatConfigured: !!d.wechat_configured,
+        serverStatus: d.wechat_configured
+          ? (d.api_key_configured ? '已连接' : '微信已配置，ASR/LLM 密钥未配')
+          : '服务端未配置微信登录 (WECHAT_APPID/SECRET)',
       });
     } catch (e) {
       this.setData({
