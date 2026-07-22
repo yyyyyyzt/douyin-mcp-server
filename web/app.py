@@ -14,6 +14,7 @@ import json
 import uuid
 import sqlite3
 import threading
+import logging
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -39,6 +40,8 @@ from douyin_downloader import get_video_info, extract_text
 from core import db, structure, retrieve, qa, documents, prompts
 from core import auth as auth_core
 from core import wechat as wechat_auth
+from core.http_log import RequestLogMiddleware
+from core.log_config import is_dev_mode, setup_logging
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
 from core.documents import DocumentParseError
@@ -56,6 +59,9 @@ DB_PATH = os.getenv(
     str(Path(__file__).parent.parent / "data" / "knowledge.db"),
 )
 
+logger = logging.getLogger("zizhuang.app")
+auth_logger = logging.getLogger("zizhuang.auth")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -66,10 +72,19 @@ async def lifespan(app: FastAPI):
         db.init_db(conn)
     finally:
         conn.close()
+    wechat_ok = bool(os.getenv("WECHAT_APPID", "").strip() and os.getenv("WECHAT_SECRET", "").strip())
+    logger.info(
+        "started dev=%s db=%s wechat_configured=%s log_level=%s",
+        is_dev_mode(),
+        DB_PATH,
+        wechat_ok,
+        os.getenv("LOG_LEVEL", "INFO"),
+    )
     yield
 
 
 app = FastAPI(title="自装助手", version="2.0.0", lifespan=lifespan)
+app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -257,18 +272,39 @@ class WechatLoginRequest(BaseModel):
 
 
 @app.post("/api/auth/wechat/login")
-async def wechat_login(req: WechatLoginRequest, conn=Depends(get_db)):
+async def wechat_login(req: WechatLoginRequest, request: Request, conn=Depends(get_db)):
     """小程序 wx.login 的 code → 会话 token。"""
+    client = request.client.host if request.client else "-"
+    code = (req.code or "").strip()
+    code_hint = f"{code[:8]}..." if len(code) > 8 else "(empty)"
+    auth_logger.info("wechat login attempt client=%s code=%s", client, code_hint)
+
+    if not code:
+        auth_logger.warning("wechat login rejected: empty code client=%s", client)
+        raise HTTPException(status_code=400, detail="缺少微信登录 code")
+
     appid = os.getenv("WECHAT_APPID", "").strip()
     secret = os.getenv("WECHAT_SECRET", "").strip()
+    if not appid or not secret:
+        auth_logger.warning("wechat login rejected: not configured client=%s", client)
+        raise HTTPException(status_code=503, detail="服务端未配置 WECHAT_APPID / WECHAT_SECRET")
+
     try:
-        data = wechat_auth.code2session(req.code, appid, secret)
+        data = wechat_auth.code2session(code, appid, secret)
     except wechat_auth.WechatAuthError as e:
+        auth_logger.warning("wechat login failed client=%s reason=%s", client, e)
         raise HTTPException(status_code=401, detail=str(e)) from e
+
     user_id = db.ensure_user(conn, data["openid"], data.get("unionid"))
     db.touch_user_login(conn, user_id)
     user = db.get_user_by_id(conn, user_id)
     token = auth_core.issue_token(user_id, user["openid"])
+    auth_logger.info(
+        "wechat login ok client=%s user_id=%s openid_prefix=%s",
+        client,
+        user_id,
+        str(user["openid"])[:8],
+    )
     return {
         "success": True,
         "token": token,
@@ -1209,13 +1245,27 @@ async def chat_endpoint(
 
 
 def main():
-    """启动服务"""
+    """启动服务（dev 模式：DEBUG 全量日志）。"""
+    from core.log_config import enable_dev_mode
+
+    enable_dev_mode()
+
     port = int(os.getenv("PORT", "8080"))
-    print(f"🚀 启动文案提取器 WebUI: http://localhost:{port}")
+    dev = is_dev_mode()
+    print(f"🚀 启动自装助手 WebUI: http://localhost:{port}")
+    if dev:
+        print("🐛 Dev 模式：LOG_LEVEL=DEBUG，API 请求全量日志已开启")
     settings = get_settings()
     print(f"📝 API Key: {'已配置 (.env)' if settings.api_configured else '未配置 — 请复制 .env.example 为 .env'}")
     print(f"🤖 默认模型: LLM={settings.llm_model}  ASR={settings.asr_model}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    wechat_ok = bool(os.getenv("WECHAT_APPID", "").strip() and os.getenv("WECHAT_SECRET", "").strip())
+    print(f"🔐 微信登录: {'已配置' if wechat_ok else '未配置 WECHAT_APPID/SECRET'}")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        log_level="debug" if dev else "info",
+    )
 
 
 if __name__ == "__main__":

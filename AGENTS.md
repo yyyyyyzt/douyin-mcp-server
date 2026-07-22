@@ -25,9 +25,8 @@ startup update script already runs `uv sync`, so the `.venv` is present and depe
  WebUI `/api/health` endpoint via httpx's ASGI transport).
 
 ### Services / how to run
-- **Backend + Web 调试界面** (FastAPI + uvicorn): `python web/app.py` → http://localhost:8080
- (override port with `PORT`). `web/app.py` imports the downloader from
- `douyin-video/scripts/douyin_downloader.py` by inserting that dir onto `sys.path`.
+- **Backend + Web 调试界面** (FastAPI + uvicorn): `uv run python web/app.py` → http://localhost:8080
+  （默认 **Dev 模式**：`LOG_LEVEL=DEBUG` + 全量 API 请求日志；生产用 `uvicorn web.app:app` 时默认 INFO）
 - **小程序**：微信开发者工具打开 `miniprogram/`（云环境无法运行开发者工具，只能改代码 +
  后端接口级测试；UI 需用户真机/工具验收）。
 - **CLI**: `python douyin-video/scripts/douyin_downloader.py --help`.
