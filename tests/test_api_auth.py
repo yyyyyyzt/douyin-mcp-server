@@ -64,6 +64,22 @@ def test_wechat_login_issues_token(env, monkeypatch):
     assert db.get_user_by_openid(conn, "wx-openid-1") is not None
 
 
+def test_wechat_login_requires_code(env, monkeypatch):
+    client, _, _, _ = env
+    monkeypatch.setenv("WECHAT_APPID", "wx-test")
+    monkeypatch.setenv("WECHAT_SECRET", "secret-test")
+    resp = client.post("/api/auth/wechat/login", json={"code": ""})
+    assert resp.status_code == 400
+
+
+def test_wechat_login_requires_server_config(env, monkeypatch):
+    client, _, _, _ = env
+    monkeypatch.delenv("WECHAT_APPID", raising=False)
+    monkeypatch.delenv("WECHAT_SECRET", raising=False)
+    resp = client.post("/api/auth/wechat/login", json={"code": "mock-code"})
+    assert resp.status_code == 503
+
+
 def test_cards_requires_auth(env):
     client, _, _, _ = env
     resp = client.get("/api/cards")

@@ -1,5 +1,7 @@
 /** HTTP 封装：token 直接读本地存储，不 require auth（避免循环依赖） */
 
+const { getApiBase } = require('./api-config');
+
 const TOKEN_KEY = 'auth_token';
 
 function getToken() {
@@ -19,8 +21,7 @@ function clearToken() {
 }
 
 function getBaseUrl() {
-  const app = getApp();
-  return (app && app.globalData && app.globalData.apiBase) || '';
+  return getApiBase();
 }
 
 function markNeedLogin() {

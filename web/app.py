@@ -14,6 +14,8 @@ import json
 import uuid
 import sqlite3
 import threading
+import logging
+import time
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -29,6 +31,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 import requests
 
@@ -39,6 +42,7 @@ from douyin_downloader import get_video_info, extract_text
 from core import db, structure, retrieve, qa, documents, prompts
 from core import auth as auth_core
 from core import wechat as wechat_auth
+from core.log_config import setup_logging
 from core.llm import LLMClient, LLMError
 from core.structure import StructureError
 from core.documents import DocumentParseError
@@ -50,11 +54,23 @@ from core.settings import (
     resolve_asr_model,
 )
 
+setup_logging()
+logger = logging.getLogger("zizhuang.app")
+http_logger = logging.getLogger("zizhuang.http")
+
 # 知识库数据库路径（可用环境变量覆盖）
 DB_PATH = os.getenv(
     "KNOWLEDGE_DB",
     str(Path(__file__).parent.parent / "data" / "knowledge.db"),
 )
+
+
+def _local_auth_enabled() -> bool:
+    return os.getenv("ALLOW_LOCAL_AUTH", "0").strip().lower() in ("1", "true", "yes")
+
+
+def _wechat_configured() -> bool:
+    return bool(os.getenv("WECHAT_APPID", "").strip() and os.getenv("WECHAT_SECRET", "").strip())
 
 
 @asynccontextmanager
@@ -66,10 +82,50 @@ async def lifespan(app: FastAPI):
         db.init_db(conn)
     finally:
         conn.close()
+    wechat_ok = _wechat_configured()
+    logger.info(
+        "started db=%s wechat_configured=%s allow_local_auth=%s",
+        DB_PATH,
+        wechat_ok,
+        _local_auth_enabled(),
+    )
     yield
 
 
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """记录每个 HTTP 请求：方法、路径、状态码、耗时。"""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        client = request.client.host if request.client else "-"
+        path = request.url.path
+        try:
+            response = await call_next(request)
+        except Exception:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            http_logger.exception(
+                "%s %s %s -> error %.1fms",
+                client,
+                request.method,
+                path,
+                elapsed_ms,
+            )
+            raise
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        if path.startswith("/api/"):
+            http_logger.info(
+                "%s %s %s -> %s %.1fms",
+                client,
+                request.method,
+                path,
+                response.status_code,
+                elapsed_ms,
+            )
+        return response
+
+
 app = FastAPI(title="自装助手", version="2.0.0", lifespan=lifespan)
+app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -165,10 +221,6 @@ def get_current_user(request: Request, conn=Depends(get_db)) -> dict:
     return user
 
 
-def _local_auth_enabled() -> bool:
-    return os.getenv("ALLOW_LOCAL_AUTH", "0").strip().lower() in ("1", "true", "yes")
-
-
 def _assert_task_owner(task: Optional[dict], user_id: int) -> dict:
     if task is None:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -216,19 +268,43 @@ class WechatLoginRequest(BaseModel):
     code: str
 
 
+auth_logger = logging.getLogger("zizhuang.auth")
+
+
 @app.post("/api/auth/wechat/login")
-async def wechat_login(req: WechatLoginRequest, conn=Depends(get_db)):
+async def wechat_login(req: WechatLoginRequest, request: Request, conn=Depends(get_db)):
     """小程序 wx.login 的 code → 会话 token。"""
+    client = request.client.host if request.client else "-"
+    code = (req.code or "").strip()
+    code_hint = f"{code[:8]}..." if len(code) > 8 else "(empty)"
+    auth_logger.info("wechat login attempt client=%s code=%s", client, code_hint)
+
+    if not code:
+        auth_logger.warning("wechat login rejected: empty code client=%s", client)
+        raise HTTPException(status_code=400, detail="缺少微信登录 code")
+
     appid = os.getenv("WECHAT_APPID", "").strip()
     secret = os.getenv("WECHAT_SECRET", "").strip()
+    if not appid or not secret:
+        auth_logger.warning("wechat login rejected: server not configured client=%s", client)
+        raise HTTPException(status_code=503, detail="服务端未配置 WECHAT_APPID / WECHAT_SECRET")
+
     try:
-        data = wechat_auth.code2session(req.code, appid, secret)
+        data = wechat_auth.code2session(code, appid, secret)
     except wechat_auth.WechatAuthError as e:
+        auth_logger.warning("wechat login failed client=%s reason=%s", client, e)
         raise HTTPException(status_code=401, detail=str(e)) from e
+
     user_id = db.ensure_user(conn, data["openid"], data.get("unionid"))
     db.touch_user_login(conn, user_id)
     user = db.get_user_by_id(conn, user_id)
     token = auth_core.issue_token(user_id, user["openid"])
+    auth_logger.info(
+        "wechat login ok client=%s user_id=%s openid_prefix=%s",
+        client,
+        user_id,
+        str(user["openid"])[:8],
+    )
     return {"success": True, "token": token, "user": user}
 
 
@@ -257,6 +333,7 @@ async def health_check():
     return {
         "status": "ok",
         "api_key_configured": settings.api_configured,
+        "wechat_configured": _wechat_configured(),
     }
 
 
@@ -266,6 +343,7 @@ async def app_config():
     settings = get_settings()
     return {
         "api_key_configured": settings.api_configured,
+        "wechat_configured": _wechat_configured(),
         "defaults": {
             "llm_model": settings.llm_model,
             "asr_model": settings.asr_model,
