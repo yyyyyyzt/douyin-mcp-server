@@ -18,7 +18,12 @@ sys.path.insert(0, str(ROOT / "douyin-video" / "scripts"))
 
 @pytest.fixture(autouse=True)
 def _test_api_key(monkeypatch):
-    """测试环境默认提供 API Key（模拟 .env 已配置）。"""
+    """测试环境默认提供 API Key（模拟 .env 已配置）。
+
+    生产机 pytest 会 import settings 并加载 .env；若不清除 LLM_API_KEY，
+    会读到真实密钥导致 llm/settings 相关断言失败。
+    """
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("API_KEY", "sk-test")
     monkeypatch.setenv("SESSION_SECRET", "test-secret")
     monkeypatch.setenv("ALLOW_LOCAL_AUTH", "1")

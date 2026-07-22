@@ -127,6 +127,7 @@ def test_from_env_falls_back_to_api_key(monkeypatch):
 
 
 def test_resolve_prefers_request_model(monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("API_KEY", "sk-shared")
     monkeypatch.setenv("LLM_MODEL", "default-model")
     client = llm.LLMClient.resolve("user-model")
@@ -135,6 +136,7 @@ def test_resolve_prefers_request_model(monkeypatch):
 
 
 def test_resolve_falls_back_to_default_model(monkeypatch):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("API_KEY", "sk-shared")
     monkeypatch.setenv("LLM_MODEL", "default-model")
     client = llm.LLMClient.resolve("")
